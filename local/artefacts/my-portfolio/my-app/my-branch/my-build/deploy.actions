@@ -1,0 +1,82 @@
+- Label: test1-create-user-123456789012-us-east-1
+  Type: AWS::CreateUser
+  Params:
+    Account: '123456789012'
+    UserName: bob
+    Region: us-east-1
+    Tags:
+      Portfolio: my-portfolio
+  Scope: portfolio
+- Label: test1-delete-user-123456789012-us-east-1
+  Type: AWS::DeleteUser
+  DependsOn:
+  - test1-create-user-123456789012-us-east-1
+  Params:
+    Account: '123456789012'
+    UserName: bob
+    Region: us-east-1
+    Tags:
+      Portfolio: my-portfolio
+  Scope: portfolio
+- Label: test1-create-stack-123456789012-us-east-1
+  Type: AWS::CreateStack
+  Params:
+    Account: '123456789012'
+    StackName: my-first-stack
+    Region: us-east-1
+    TemplateUrl: 
+      https://s3-us-east-1.amazonaws.com/my-client-core-automation-master/artefacts/my-portfolio/my-frist-stack.yaml
+    StackParameters:
+      build: '12345'
+    Tags:
+      Portfolio: my-portfolio
+  Scope: portfolio
+- Label: test1-delete-stack-123456789012-us-east-1
+  Type: AWS::DeleteStack
+  DependsOn:
+  - test1-create-stack-123456789012-us-east-1
+  Params:
+    Account: '123456789012'
+    StackName: my-first-stack
+    Region: us-east-1
+    TemplateUrl: 
+      https://s3-us-east-1.amazonaws.com/my-client-core-automation-master/artefacts/my-portfolio/my-frist-stack.yaml
+    StackParameters:
+      build: '12345'
+    Tags:
+      Portfolio: my-portfolio
+  Scope: portfolio
+- Label: test1-create-change-set-123456789012-us-east-1
+  Type: AWS::CreateChangeSet
+  Params:
+    Account: '123456789012'
+    StackName: my-first-stack
+    Region: us-east-1
+    TemplateUrl: 
+      https://s3-us-east-1.amazonaws.com/my-client-core-automation-master/artefacts/my-portfolio/my-app/my-branch/my-build/my-frist-stack.yaml
+    StackParameters:
+      build: '12345'
+    Tags:
+      Portfolio: my-portfolio
+      App: my-app
+      Branch: my-branch
+      Build: my-build
+  Scope: build
+- Label: test1-delete-change-set-123456789012-us-east-1
+  Type: AWS::DeleteChangeSet
+  DependsOn:
+  - test1-create-change-set-123456789012-us-east-1
+  Params:
+    Account: '123456789012'
+    StackName: my-first-stack
+    Region: us-east-1
+    TemplateUrl: 
+      https://s3-us-east-1.amazonaws.com/my-client-core-automation-master/artefacts/my-portfolio/my-app/my-branch/my-build/my-frist-stack.yaml
+    StackParameters:
+      build: '12345'
+    Tags:
+      Portfolio: my-portfolio
+      App: my-app
+      Branch: my-branch
+      Build: my-build
+  Scope: build

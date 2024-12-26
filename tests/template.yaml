@@ -1,0 +1,24 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Test template"
+
+Parameters:
+  TestParameter:
+    Type: "String"
+    Default: "test"
+
+Resources:
+  TestResource:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      InstanceType: "t2.micro"
+      ImageId: "ami-0c55b159cbfafe1f0"
+      KeyName: "test-key"
+      SecurityGroups:
+        - "sg-12345678"
+      Tags:
+        - Key: "Name"
+          Value: "TestInstance"
+
+Outputs:
+  TestOutput:
+    Value: "TestOutputValue"
