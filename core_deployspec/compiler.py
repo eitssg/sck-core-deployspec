@@ -113,9 +113,7 @@ def process_package_local(
     if not app_dir:
         app_dir = os.getcwd()
 
-    pkg = (
-        os.path.join(app_dir, package_details.Key) if package_details.Key else app_dir
-    )
+    pkg = os.path.join(app_dir, package_details.Key) if package_details.Key else app_dir
 
     log.debug("Loading local files for app_dir={}".format(app_dir))
 
