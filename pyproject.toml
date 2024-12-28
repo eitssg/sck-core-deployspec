@@ -30,12 +30,11 @@ pyyaml-include = "^2.1"
 
 [tool.poetry.dependencies.sck-core-db]
 path = "../sck-core-db"
-depend = true
-
+develop = true
 
 [tool.poetry.dependencies.sck-core-framework]
 path = "../sck-core-framework"
-depend = true
+develop = true
 [[tool.poetry.source]]
 name = "nexus"
 url = "https://monster-jj.jvj28.com:9091/repository/pypi/simple/"
