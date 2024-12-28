@@ -1,7 +1,7 @@
 from pydantic import ValidationError
 import pytest
 
-from core_deployspec_compiler.handler import handler
+from core_deployspec.handler import handler
 
 from core_framework.models import DeploymentDetails, PackageDetails, TaskPayload
 

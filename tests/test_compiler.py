@@ -6,7 +6,7 @@ import os
 from core_framework.models import TaskPayload, PackageDetails, ActionDefinition
 from core_framework.constants import V_LOCAL
 
-from core_deployspec_compiler.compiler import (
+from core_deployspec.compiler import (
     process_package_local,
     process_package_s3,
     compile_deployspec,
@@ -36,7 +36,6 @@ def test_process_package_local(runtime_arguments):
     try:
         # get the current script folder
         package_details = PackageDetails(**runtime_arguments)
-        package_details.AppPath = os.path.dirname(os.path.realpath(__file__))
 
         result = process_package_local(package_details)
 

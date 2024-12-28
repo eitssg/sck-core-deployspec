@@ -52,10 +52,10 @@ def generate_state(task_payload: TaskPayload, scope: str = SCOPE_BUILD) -> dict:
     This state is used so that you can use Jinja2 templating in your deployspec
 
     Args:
-        task_payload (dict): _description_
+        task_payload (dict): The task payload contianng the deployment details and package details
 
     Returns:
-        dict: _description_
+        dict: A state dictionary that can be used for Jinja2 templating
     """
 
     deployment_details = task_payload.DeploymentDetails

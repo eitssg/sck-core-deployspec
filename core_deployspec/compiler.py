@@ -113,13 +113,14 @@ def process_package_local(
     if not app_dir:
         app_dir = os.getcwd()
 
-    pkg_path = (
+    pkg = (
         os.path.join(app_dir, package_details.Key) if package_details.Key else app_dir
     )
 
     log.debug("Loading local files for app_dir={}".format(app_dir))
 
-    pkg = os.path.join(pkg_path, V_PACKAGE_ZIP)
+    if not pkg.endswith(V_PACKAGE_ZIP):
+        pkg = os.path.join(pkg, V_PACKAGE_ZIP)
 
     # If there is a packge.zip file in this folder, we can process it.
     if os.path.exists(pkg):

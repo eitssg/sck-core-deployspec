@@ -8,7 +8,7 @@ from core_framework.constants import (
     SCOPE_BUILD,
 )
 
-from core_deployspec_compiler.compiler import (
+from core_deployspec.compiler import (
     __get_stack_scope,
     get_region_account_labels,
 )
