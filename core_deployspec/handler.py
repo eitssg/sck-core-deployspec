@@ -1,16 +1,14 @@
 from typing import Any
 import os
+
 import core_logging as log
 
 import core_helper.aws as aws
 
-import core_framework as util
+from core_db.facter import get_facts
+
 from core_framework.constants import (
     TP_DEPLOYMENT_DETAILS,
-    SCOPE_PORTFOLIO,
-    SCOPE_APP,
-    SCOPE_BRANCH,
-    SCOPE_BUILD,
     V_EMPTY,
     V_LOCAL,
 )
@@ -19,15 +17,14 @@ from core_framework.status import COMPILE_FAILED, COMPILE_COMPLETE, COMPILE_IN_P
 from .compiler import (
     apply_state,
     compile_deployspec,
-    get_template_url,
     process_package_local,
     process_package_s3,
     to_yaml,
     upload_actions,
-    LocalBucket,
 )
 
 from core_framework.models import DeploySpec, TaskPayload, ActionDefinition
+from core_framework.magic import MagicS3Client
 
 
 def load_deployspec(task_payload: TaskPayload) -> DeploySpec:
@@ -36,62 +33,13 @@ def load_deployspec(task_payload: TaskPayload) -> DeploySpec:
     package_details = task_payload.Package
 
     if package_details.Mode == V_LOCAL:
-        upload_prefix = util.get_artefacts_path(deployment_details, scope=SCOPE_BUILD)
+        upload_prefix = deployment_details.get_artefacts_key(s3=False)
         deployspec = process_package_local(package_details, upload_prefix)
     else:
-        upload_prefix = util.get_artefact_key(
-            deployment_details, scope=task_payload.DeploymentDetails.Scope
-        )
+        upload_prefix = deployment_details.get_artefacts_key(s3=True)
         deployspec = process_package_s3(package_details, upload_prefix)
 
     return deployspec
-
-
-def generate_state(task_payload: TaskPayload, scope: str = SCOPE_BUILD) -> dict:
-    """
-    This state is used so that you can use Jinja2 templating in your deployspec
-
-    Args:
-        task_payload (dict): The task payload contianng the deployment details and package details
-
-    Returns:
-        dict: A state dictionary that can be used for Jinja2 templating
-    """
-
-    deployment_details = task_payload.DeploymentDetails
-    package_details = task_payload.Package
-    bucket_name = package_details.BucketName
-    bucket_region = package_details.BucketRegion
-
-    # Dump to string and find/replace the state. We do this as late as possible because some logic inspects the
-    # contents for stuff like stack_name BEFORE it's replaced.
-    state: dict = {
-        "core": {
-            "ArtifactBucketName": bucket_name,
-            "ArtifactBucketRegion": bucket_region,
-            "ArtifactKeyPrefix": util.get_artefact_key(
-                deployment_details, scope=SCOPE_BUILD
-            ),
-            "ArtifactKeyBuildPrefix": util.get_artefact_key(
-                deployment_details, scope=SCOPE_BUILD
-            ),
-            "ArtifactKeyBranchPrefix": util.get_artefact_key(
-                deployment_details, scope=SCOPE_BRANCH
-            ),
-            "ArtifactKeyAppPrefix": util.get_artefact_key(
-                deployment_details, scope=SCOPE_APP
-            ),
-            "ArtifactKeyPortfolioPrefix": util.get_artefact_key(
-                deployment_details, scope=SCOPE_PORTFOLIO
-            ),
-            "ArtifactBaseUrl": get_template_url(
-                bucket_name, bucket_region, deployment_details, None, scope
-            ),
-            **deployment_details.model_dump(),
-        }
-    }
-
-    return state
 
 
 def upload_actions_output(
@@ -114,22 +62,28 @@ def upload_actions_output(
 
     upload_prefix = V_EMPTY
 
-    if package_details.Mode == V_LOCAL:
+    # Process the package and retrieve the deployspec
 
-        upload_prefix = util.get_artefacts_path(deployment_details)
+    if package_details.Mode == V_LOCAL:
+        # Upload to Local
+
+        upload_prefix = deployment_details.get_artefacts_key(s3=False)
 
         log.debug("upload_prefix={}", upload_prefix)
 
-        bucket = LocalBucket(bucket_name, package_details.AppPath)
+        # Download file from Local
+        local = MagicS3Client(Region=bucket_region, AppPath=package_details.AppPath)
+        bucket = local.Bucket(bucket_name)
 
+        # Normal flow means upload compiled actions to Local.
         actions_key, actions_version = upload_actions(
             bucket, upload_prefix, actions_output, os.path.sep
         )
-    else:
 
-        # Normal flow.
-        # Process the package and retrieve the deployspec
-        upload_prefix = util.get_artefact_key(deployment_details)
+    else:
+        # Upload to S3
+
+        upload_prefix = deployment_details.get_artefacts_key(s3=True)
 
         log.debug("upload_prefix={}", upload_prefix)
 
@@ -141,6 +95,10 @@ def upload_actions_output(
         actions_key, actions_version = upload_actions(
             bucket, upload_prefix, actions_output
         )
+
+    # Mutate task_payload with the actions version that was saved
+    task_payload.Actions.Key = actions_key
+    task_payload.Actions.VersionId = actions_version
 
     return actions_key, actions_version
 
@@ -191,7 +149,7 @@ def handler(event: dict, context: Any | None) -> dict:
         log.debug("Finalizing Templates.  Jinja2 templating.")
 
         # Get the Jinja2 context for variable replacment if Jinja is in the the text.
-        state = generate_state(task_payload)
+        state = get_context(deployment_details)
 
         dictlist = [a.model_dump(exclude_none=True) for a in actions]
 
@@ -202,19 +160,17 @@ def handler(event: dict, context: Any | None) -> dict:
         # Upload the compiled actions to the target defined specified by the deployment details
         key, version = upload_actions_output(task_payload, actions_output)
 
+        artefact_info = {"Scope": "deployspec", "Key": key, "Version": version}
+
         log.status(
             COMPILE_COMPLETE,
             "Deployspec compilation successful",
-            details={"Scope": "deployspec", "Key": key, "Version": version},
+            details=artefact_info,
         )
 
         return {
             TP_DEPLOYMENT_DETAILS: deployment_details.model_dump(),
-            "Artefact": {
-                "Scope": "deployspec",
-                "Key": key,
-                "Version": version,
-            },
+            "Artefact": artefact_info,
         }
 
     except Exception as e:
@@ -224,3 +180,21 @@ def handler(event: dict, context: Any | None) -> dict:
             details={"Scope": "deployspec", "Error": str(e)},
         )
         raise
+
+
+def get_context(task_payload: TaskPayload) -> dict:
+    """
+    Get the context for the Jinja2 templating
+
+    Args:
+        task_payload (TaskPayload): The task payload object
+
+    Returns:
+        dict: The context for the Jinja2 templating
+    """
+    deployment_details = task_payload.DeploymentDetails
+
+    # Get the facts for the deployment
+    facts = get_facts(deployment_details)
+
+    return {"context": facts}

@@ -3,8 +3,20 @@ from pydantic import ValidationError
 import pytest
 import os
 
-from core_framework.models import TaskPayload, PackageDetails, ActionDefinition
-from core_framework.constants import V_LOCAL
+import core_framework as util
+from core_framework.models import (
+    TaskPayload,
+    PackageDetails,
+    ActionDefinition,
+    ActionSpec,
+    DeploySpec,
+)
+from core_framework.constants import (
+    V_LOCAL,
+    V_PACKAGE_ZIP,
+    V_DEPLOYSPEC_FILE_YAML,
+)
+from core_framework.magic import MagicS3Client
 
 from core_deployspec.compiler import (
     process_package_local,
@@ -16,10 +28,28 @@ from core_deployspec.compiler import (
 @pytest.fixture
 def runtime_arguments():
 
+    client = util.get_client()
+    data_dir = util.get_storage_volume()
+
     # These typically come from environment variables or command line arguments
+    # The bucket name is the standard core-automation folder name
+    bucket_name = util.get_bucket_name()
+
+    artefact_path = os.path.join(data_dir, bucket_name)
+
+    os.makedirs(artefact_path, exist_ok=True)
+
+    zipfilename = os.path.join(artefact_path, V_PACKAGE_ZIP)
+
+    dirname = os.path.dirname(os.path.realpath(__file__))
+
+    # create or update our test package zip with our test deployspec.yaml file.
+    os.system(
+        f"cd {dirname} && 7z a {zipfilename} {V_DEPLOYSPEC_FILE_YAML} template.yaml"
+    )
 
     return {
-        "client": "my-client",
+        "client": client,
         "portfolio": "my-portfolio",
         "app": "my-app",
         "branch": "my-branch",
@@ -28,6 +58,7 @@ def runtime_arguments():
         "scope": "portfolio",
         "environment": "dev",
         "data_center": "us-east-1",
+        "package_key": V_PACKAGE_ZIP,
     }
 
 
@@ -35,13 +66,18 @@ def test_process_package_local(runtime_arguments):
 
     try:
         # get the current script folder
-        package_details = PackageDetails(**runtime_arguments)
+        package_details = PackageDetails.from_arguments(**runtime_arguments)
 
+        # Should return a DeploySpec object from the package.zip
         result = process_package_local(package_details)
 
-        print(result)
-
         assert result is not None
+
+        assert isinstance(result, DeploySpec)
+
+        assert isinstance(result.action_specs, list)
+
+        assert isinstance(result.action_specs[0], ActionSpec)
 
         assert len(result.action_specs) == 6
 
@@ -50,48 +86,12 @@ def test_process_package_local(runtime_arguments):
         assert False, e
 
 
-class MagicBucket:
-
-    key = None
-
-    def __init__(self, key):
-        self.key = key
-
-    def download_fileobj(self, key, fileobj):
-        with open(key, "rb") as file:
-            fileobj.write(file.read())
-        fileobj.seek(0)
-
-    def put_object(self, **kwargs):
-        self.key = kwargs["Key"]
-        pass
+def get_s3_resource(bucket_region):
+    """For the Mock"""
+    return MagicS3Client(Region=bucket_region)
 
 
-testingBucket: MagicBucket | None = None
-
-
-class S3Resource:
-
-    name: str | None = None
-    region: str | None = None
-
-    def __init__(self, region):
-        self.region = region
-
-    def Bucket(self, name):
-        global testingBucket
-
-        self.name = name
-        testingBucket = MagicBucket(name)
-        return testingBucket
-
-
-def get_s3_resource(name):
-
-    return S3Resource(name)
-
-
-def test_process_package_zip():
+def test_process_package_zip(runtime_arguments):
 
     # Our test zip file has two files in it,
 
@@ -99,13 +99,12 @@ def test_process_package_zip():
     # 2. deployspec.yaml
 
     try:
-        with patch("aws.s3_resource", get_s3_resource):
+        """Because we created "mocks", it will behave much like 'local'"""
+        with patch("core_helper.aws.s3_resource", get_s3_resource):
 
             # when the mock_s3_resource.Bukcket() mthod is called, return mock_bucket intance
 
-            app_path = os.path.dirname(os.path.realpath(__file__))
-            key = os.path.join(app_path, "deployspec.zip")
-            package_details = PackageDetails(AppPath=app_path, Key=key)
+            package_details = PackageDetails.from_arguments(**runtime_arguments)
 
             assert package_details.Mode == V_LOCAL
 
@@ -114,13 +113,10 @@ def test_process_package_zip():
 
             assert deployspec is not None
 
-            # assert deployspec is not None
-            print(deployspec)
-
             assert len(deployspec.action_specs) == 6
 
             # Inside of the zip file is a template.yaml file.  check to see if it was uploaded
-            assert testingBucket.key == "artefacts/template.yaml"
+            assert package_details.Key == "package.zip"
 
     except Exception as e:
         print(e)
@@ -133,8 +129,6 @@ def test_compile_deployspec(runtime_arguments):
         task_payload = TaskPayload.from_arguments(**runtime_arguments)
 
         assert task_payload is not None
-
-        task_payload.Package.AppPath = os.path.dirname(os.path.realpath(__file__))
 
         deployspec = process_package_local(task_payload.Package)
 

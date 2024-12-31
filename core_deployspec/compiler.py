@@ -6,7 +6,6 @@
 """
 
 from typing import Any
-from types import SimpleNamespace
 import io
 import os
 import re
@@ -50,50 +49,10 @@ from core_framework.models import (
     PackageDetails,
 )
 
+from core_framework.magic import MagicS3Client
+
+
 SpecLabelMapType = dict[str, list[str]]
-
-
-class LocalBucket:
-
-    Name: str | None
-    Key: str | None
-    Body: str | None
-    ServerSideEncryption: str | None
-
-    def __init__(self, name: str, app_dir: str):
-        self.Name = name
-        self.app_dir = app_dir
-
-    def download_fileobj(self, fileobj: io.BytesIO, key: str):
-        self.Key = key
-        with open(self.Key, "rb") as file:
-            fileobj.write(file.read())
-        fileobj.seek(0)
-
-    def put_object(self, **kwargs) -> SimpleNamespace:
-
-        if not self.app_dir:
-            return SimpleNamespace(version_id="local")
-
-        destination = kwargs.get("Key")
-        if not destination:
-            return SimpleNamespace(version_id="local")
-
-        body = kwargs.get("Body")
-        if not body:
-            return SimpleNamespace(version_id="local")
-        # encryption = kwargs["ServerSideEncryption"]
-        # acl = kwargs.get("ACL")
-
-        fn = os.path.join(self.app_dir, destination)
-
-        dirname = os.path.dirname(fn)
-        os.makedirs(dirname, exist_ok=True)
-
-        with open(fn, "wb") as file:
-            file.write(body)
-
-        return SimpleNamespace(version_id="local")
 
 
 def process_package_local(
@@ -102,6 +61,13 @@ def process_package_local(
     """
     Process package For local mode.
 
+    Package details will contain the location of the package.zip file.
+
+    This routine will extract the package.zip file and process the contents.  If it finds a deployspec.yaml
+    file, it will process that.
+
+    It will mutate package_details to include the DeploySpec object.
+
     Args:
         package_details (PackageDetails): The package details haveing the location of the deployspec.
 
@@ -109,36 +75,33 @@ def process_package_local(
         DeploySpec: The deployspec object
     """
     app_dir = package_details.AppPath
+    region = package_details.BucketRegion
+    bucket_name = package_details.BucketName
+    package_key = package_details.Key
 
-    if not app_dir:
-        app_dir = os.getcwd()
+    if package_key is None:
+        raise ValueError("Package key is required")
 
-    pkg = os.path.join(app_dir, package_details.Key) if package_details.Key else app_dir
-
-    log.debug("Loading local files for app_dir={}".format(app_dir))
-
-    if not pkg.endswith(V_PACKAGE_ZIP):
-        pkg = os.path.join(pkg, V_PACKAGE_ZIP)
+    # Download file from S3
+    log.info(
+        "Downloading package from Local ({})".format(
+            os.path.join(app_dir, bucket_name, package_key)
+        )
+    )
 
     # If there is a packge.zip file in this folder, we can process it.
-    if os.path.exists(pkg):
+    zip_fileobj = io.BytesIO()
+    local = MagicS3Client(Region=region, AppPath=package_details.AppPath)
+    bucket = local.Bucket(bucket_name)
+    bucket.download_fileobj(Key=package_key, Fileobj=zip_fileobj)
 
-        # Initialize a local bucket with the "root" path and load the package.zip file
-        zip_fileobj = io.BytesIO()
-        bucket = LocalBucket(package_details.BucketName, app_dir)
-        bucket.download_fileobj(zip_fileobj, pkg)
+    # Process the zip file
+    deployspec = process_package_zip(zip_fileobj, bucket, upload_prefix, os.path.sep)
 
-        # Process the zip file
-        return process_package_zip(zip_fileobj, bucket, upload_prefix, os.path.sep)
+    # Mutate package_details to include the DeploySpec
+    package_details.DeploySpec = deployspec
 
-    # If there isn't a package.zip in the app_dir, then we will look for a deployspec file.
-    data = util.common.load_deployspec(app_dir)
-    if not data:
-        raise Exception("Package does not contain a deployspec file, cannot continue")
-
-    package_details.DeploySpec = DeploySpec(actions=data)
-
-    return package_details.DeploySpec
+    return deployspec
 
 
 def process_package_s3(
@@ -149,10 +112,7 @@ def process_package_s3(
 
     s3_bucket: The S3 bucket to upload the files to.
 
-        ```python
-        s3 = aws.s3_resource(bucket_region)
-        bucket = s3.Bucket(bucket_name)
-        ```
+    This routine will mutate pacakge_details to include the DeploySpec object if it is found in the package.zip file.
 
     Args:
         package_details (PackageDetails): The package details having the location of the package.zip
@@ -170,8 +130,10 @@ def process_package_s3(
     bucket_region = package_details.BucketRegion
     package_key = package_details.Key
 
+    if package_key is None:
+        raise ValueError("Package key is required")
+
     # Download file from S3
-    s3 = aws.s3_resource(bucket_region)
     log.info(
         "Downloading package from S3 (bucket: {}, key: {})".format(
             bucket_name, package_key
@@ -180,11 +142,17 @@ def process_package_s3(
 
     # Read the file io stream from AWS S3
     zip_fileobj = io.BytesIO()
+    s3 = aws.s3_resource(bucket_region)
     bucket = s3.Bucket(bucket_name)
-    bucket.download_fileobj(package_key, zip_fileobj)
+    bucket.download_fileobj(Key=package_key, Fileobj=zip_fileobj)
 
     # Process the zip file
-    return process_package_zip(zip_fileobj, bucket, upload_prefix)
+    deployspec = process_package_zip(zip_fileobj, bucket, upload_prefix)
+
+    # Mutate package_details to include the DeploySpec
+    package_details.DeploySpec = deployspec
+
+    return deployspec
 
 
 def process_package_zip(
@@ -425,7 +393,7 @@ def get_action_template_url(
 def get_template_url(
     bucket_name: str,
     bucket_region: str,
-    deployment_details: DeploymentDetails,
+    dd: DeploymentDetails,
     key: str | None = None,
     scope: str | None = None,
 ) -> str:
@@ -436,7 +404,7 @@ def get_template_url(
     return "https://s3-{}.amazonaws.com/{}/{}".format(
         bucket_region,
         bucket_name,
-        util.get_artefact_key(deployment_details, key, scope),
+        dd.get_artefacts_key(key, scope)
     )
 
 
@@ -452,9 +420,11 @@ def upload_actions(
         actions_string (str): The actions file contents.
 
     """
-    actions_key = f"{upload_prefix}{sep}deploy.actions"
+    task = "deploy"
 
-    print("DEBUG: Uploading file to S3 automation bucket (key: {})".format(actions_key))
+    actions_key = f"{upload_prefix}{sep}{task}.actions"
+
+    log.debug("Uploading file to automation bucket (key: {})".format(actions_key))
 
     object = bucket.put_object(
         Body=actions_string.encode("utf-8"),
