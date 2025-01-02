@@ -51,7 +51,7 @@ def get_package(client, portfolio, app, branch, build, mode, region):
     bucket_name = "{}-core-automation-{}".format(client, region)
     bucket_region = region
 
-    app_path = "../../../{}-{}-{}".format(client, portfolio, app)
+    data_path = "../../../{}-{}-{}".format(client, portfolio, app)
     test = "test-" if mode == "test" else ""
 
     return {
@@ -62,7 +62,7 @@ def get_package(client, portfolio, app, branch, build, mode, region):
         ),
         "VersionId": None,
         "Mode": mode,
-        "AppPath": app_path,
+        "DataPath": data_path,
     }
 
 

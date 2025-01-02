@@ -4,6 +4,10 @@ import pytest
 import os
 
 import core_framework as util
+
+from core_db.registry.client import ClientFacts
+from core_db.registry.app import AppFacts
+
 from core_framework.models import (
     TaskPayload,
     PackageDetails,
@@ -12,23 +16,22 @@ from core_framework.models import (
     DeploySpec,
 )
 from core_framework.constants import (
-    V_LOCAL,
     V_PACKAGE_ZIP,
     V_DEPLOYSPEC_FILE_YAML,
 )
-from core_framework.magic import MagicS3Client
+from core_helper.magic import MagicS3Client
 
 from core_deployspec.compiler import (
-    process_package_local,
-    process_package_s3,
+    process_package,
     compile_deployspec,
 )
 
 
 @pytest.fixture
-def runtime_arguments():
+def runtime_arguments(client_data: ClientFacts, app_data: AppFacts):
 
-    client = util.get_client()
+    client = client_data.Client
+
     data_dir = util.get_storage_volume()
 
     # These typically come from environment variables or command line arguments
@@ -62,14 +65,14 @@ def runtime_arguments():
     }
 
 
-def test_process_package_local(runtime_arguments):
+def test_process_package(runtime_arguments):
 
     try:
         # get the current script folder
         package_details = PackageDetails.from_arguments(**runtime_arguments)
 
         # Should return a DeploySpec object from the package.zip
-        result = process_package_local(package_details)
+        result = process_package(package_details)
 
         assert result is not None
 
@@ -86,8 +89,9 @@ def test_process_package_local(runtime_arguments):
         assert False, e
 
 
-def get_s3_resource(bucket_region):
+def get_s3_resource(**kwargs):
     """For the Mock"""
+    bucket_region = kwargs.get("region", "us-east-1")
     return MagicS3Client(Region=bucket_region)
 
 
@@ -106,10 +110,8 @@ def test_process_package_zip(runtime_arguments):
 
             package_details = PackageDetails.from_arguments(**runtime_arguments)
 
-            assert package_details.Mode == V_LOCAL
-
             # Call the patched download_fileobj method
-            deployspec = process_package_s3(package_details, upload_prefix="artefacts")
+            deployspec = process_package(package_details, upload_prefix="artefacts")
 
             assert deployspec is not None
 
@@ -130,7 +132,7 @@ def test_compile_deployspec(runtime_arguments):
 
         assert task_payload is not None
 
-        deployspec = process_package_local(task_payload.Package)
+        deployspec = process_package(task_payload.Package)
 
         assert deployspec is not None
 

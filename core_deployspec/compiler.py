@@ -5,7 +5,6 @@
 - Uploads actions to S3
 """
 
-from typing import Any
 import io
 import os
 import re
@@ -15,7 +14,6 @@ import json
 import core_logging as log
 
 import core_framework as util
-import core_helper.aws as aws
 
 from jinja2 import Template
 
@@ -32,12 +30,11 @@ from core_framework.constants import (
     TAG_APP,
     TAG_BRANCH,
     TAG_BUILD,
-    V_DEPLOYSPEC_FILE_YAML,
-    V_DEPLOYSPEC_FILE_YML,
-    V_DEPLOYSPEC_FILE_JSON,
     V_EMPTY,
     V_PACKAGE_ZIP,
 )
+
+from core_db.facter import get_facts
 
 from core_framework.models import (
     ActionDefinition,
@@ -46,18 +43,17 @@ from core_framework.models import (
     DeploySpec,
     ActionSpec,
     DeploymentDetails,
-    PackageDetails,
 )
 
-from core_framework.magic import MagicS3Client
+from core_helper.magic import MagicS3Client
 
 
 SpecLabelMapType = dict[str, list[str]]
 
+CONTEXT_ROOT = "core"
 
-def process_package_local(
-    package_details: PackageDetails, upload_prefix: str = ""
-) -> DeploySpec:
+
+def load_deployspec(task_payload: TaskPayload) -> DeploySpec:
     """
     Process package For local mode.
 
@@ -70,11 +66,14 @@ def process_package_local(
 
     Args:
         package_details (PackageDetails): The package details haveing the location of the deployspec.
+        upload_prefix (str): The upload prefix path.  This is in the artefact key prefix
+        deployment_type (str): The deployment type: deploysepc, planspec, applyspec, teardownspec
 
     Returns:
         DeploySpec: The deployspec object
     """
-    app_dir = package_details.AppPath
+    package_details = task_payload.Package
+
     region = package_details.BucketRegion
     bucket_name = package_details.BucketName
     package_key = package_details.Key
@@ -84,83 +83,74 @@ def process_package_local(
 
     # Download file from S3
     log.info(
-        "Downloading package from Local ({})".format(
-            os.path.join(app_dir, bucket_name, package_key)
-        )
+        "Downloading package from storage ({}) ({})".format(bucket_name, package_key)
     )
+
+    # Get the storage location
+    bucket = MagicS3Client.get_bucket(Region=region, BucketName=bucket_name)
 
     # If there is a packge.zip file in this folder, we can process it.
     zip_fileobj = io.BytesIO()
-    local = MagicS3Client(Region=region, AppPath=package_details.AppPath)
-    bucket = local.Bucket(bucket_name)
     bucket.download_fileobj(Key=package_key, Fileobj=zip_fileobj)
 
-    # Process the zip file
-    deployspec = process_package_zip(zip_fileobj, bucket, upload_prefix, os.path.sep)
+    # We have read the entire zip file into memory.  I hope it's not too big!!
+    # Process the zip file and extract the deployspec file.
+    spec = process_package_zip(task_payload, zip_fileobj, os.path.sep)
 
     # Mutate package_details to include the DeploySpec
-    package_details.DeploySpec = deployspec
 
-    return deployspec
+    return spec
 
 
-def process_package_s3(
-    package_details: PackageDetails, upload_prefix: str = ""
-) -> DeploySpec:
-    """
-    Read the contest of the BytesIO buffer which should contain a zip file.
-
-    s3_bucket: The S3 bucket to upload the files to.
-
-    This routine will mutate pacakge_details to include the DeploySpec object if it is found in the package.zip file.
-
-    Args:
-        package_details (PackageDetails): The package details having the location of the package.zip
-        upload_prefix (str): Uploading all files to S3 artefacts location
-
-    Raises:
-        Exception: if a deployspec file is not found in the zip file
-
-    Returns:
-        DeploySpec: Object representing the deployspec
-
-    """
-
-    bucket_name = package_details.BucketName
-    bucket_region = package_details.BucketRegion
-    package_key = package_details.Key
-
-    if package_key is None:
-        raise ValueError("Package key is required")
-
-    # Download file from S3
-    log.info(
-        "Downloading package from S3 (bucket: {}, key: {})".format(
-            bucket_name, package_key
-        )
-    )
-
-    # Read the file io stream from AWS S3
-    zip_fileobj = io.BytesIO()
-    s3 = aws.s3_resource(bucket_region)
-    bucket = s3.Bucket(bucket_name)
-    bucket.download_fileobj(Key=package_key, Fileobj=zip_fileobj)
-
-    # Process the zip file
-    deployspec = process_package_zip(zip_fileobj, bucket, upload_prefix)
-
-    # Mutate package_details to include the DeploySpec
-    package_details.DeploySpec = deployspec
-
-    return deployspec
+def get_deployment_type(task: str) -> str:
+    if task == "deploy":
+        return "deployspec"
+    elif task == "plan":
+        return "planspec"
+    elif task == "apply":
+        return "applyspec"
+    elif task == "teardown":
+        return "teardownspec"
+    else:
+        raise ValueError(f"Invalid task: {task}")
 
 
 def process_package_zip(
-    zip_fileobj: io.BytesIO, bucket: Any, upload_prefix: str = "", sep: str = "/"
+    task_payload: TaskPayload,
+    zip_fileobj: io.BytesIO,
+    sep: str = "/",
 ) -> DeploySpec:
+    """
+    Process the zip package copying content to the artefacts store while extraction the actions
+    into a DeploySpec object. (plan, appl, deploy, or teardown)
 
-    # Note that we have not yet seen a deployspc file
-    deployspec: DeploySpec | None = None
+    Args:
+        zip_fileobj (io.BytesIO): io stream of the zip file
+        bucket (Any): a MagicBucket or boto3 bucket object
+        upload_prefix (str): where in the store to upload
+        deployment_type (str): deployspec, planspec, applyspec, teardownspec
+        sep (str, optional): zip files will have "/", do we replace?. Defaults to "/".
+
+    Raises:
+        Exception: if the package does not contain a deployspec file or is malformed.
+
+    Returns:
+        DeploySpec: the deployspec object with the deployspec, plansepec, applyspec, or teardownspec actions
+    """
+
+    deployment_details = task_payload.DeploymentDetails
+
+    # Get the artefacts location
+    upload_prefix = deployment_details.get_artefacts_key()
+
+    # Get the bucket details for artefacts which are in the Actions or State objects
+    bucket_name = task_payload.Actions.BucketName
+    bucket_region = task_payload.Actions.BucketRegion
+
+    deployment_type = get_deployment_type(task_payload.Task)
+
+    # This will be returned and added to the task_payload packages
+    spec: DeploySpec | None = None
 
     zipfile = zip.ZipFile(zip_fileobj, "r")
 
@@ -168,37 +158,48 @@ def process_package_zip(
         "Extracting {} and Uploading artefact to: {}", V_PACKAGE_ZIP, upload_prefix
     )
 
+    bucket = MagicS3Client.get_bucket(Region=bucket_region, BucketName=bucket_name)
+
     for name in zipfile.namelist():
 
-        if name == V_DEPLOYSPEC_FILE_YML or name == V_DEPLOYSPEC_FILE_YAML:
+        # as we iterate through the files, look for the spec we are interested in
+        # compiling.  This will be the deployspec, planspec, applyspec, or teardownspec
+        # file.  We will also upload all files to the artefacts store for documentation purposes.
+        # and return the spec for further processing.
+        if name == f"{deployment_type}.yaml":
 
             log.info("Loading deployspec name={}", name)
-            y = yaml.YAML(typ="safe")
-            data = y.load(zipfile.read(name))
-            deployspec = DeploySpec(actions=data)
 
-        elif name == V_DEPLOYSPEC_FILE_JSON:
+            y = yaml.YAML(typ="rt")
+            data = y.load(zipfile.read(name))
+            spec = DeploySpec(actions=data)
+
+        elif name == f"{deployment_type}.json":
 
             log.info("Loading deployspec name={}", name)
 
             data = json.loads(zipfile.read(name))
-            deployspec = DeploySpec(actions=data)
+            spec = DeploySpec(actions=data)
 
-        else:
-            # Upload CFN templates etc to S3 now.
-            key = f"{upload_prefix}{sep}{name}"
+        # Upload all files to the artefacts store for documentation purposes
+        # and this includes the cloduformation templates needed for the actions.
 
-            log.debug("Uploading file: {})", key)
+        key = f"{upload_prefix}{sep}{name}"
+        data = zipfile.read(name)
 
-            bucket.put_object(
-                Key=key, Body=zipfile.read(name), ServerSideEncryption="AES256"
-            )
+        log.info("Uploading file: {})", key)
+
+        bucket.put_object(Key=key, Body=data, ServerSideEncryption="AES256")
 
     # Process deployspec
-    if not deployspec:
-        raise Exception("Package does not contain a deployspec file, cannot continue")
+    if not spec:
+        raise Exception(
+            f"Package does not contain a {deployment_type} file, cannot continue"
+        )
 
-    return deployspec
+    task_payload.Package.DeploySpec = spec
+
+    return spec
 
 
 def get_accounts_regions(action_spec: ActionSpec) -> tuple[list[str], list[str]]:
@@ -233,7 +234,16 @@ def get_accounts_regions(action_spec: ActionSpec) -> tuple[list[str], list[str]]
 
 
 def get_region_account_labels(action_spec: ActionSpec) -> list[str]:
+    """
+    Generate a unique list of labels for the action specification
+    for each account/region permuation.
 
+    Args:
+        action_spec (ActionSpec): The action specification
+
+    Returns:
+        list[str]: List of labels
+    """
     accounts, regions = get_accounts_regions(action_spec)
 
     labels = [
@@ -394,52 +404,83 @@ def get_template_url(
     bucket_name: str,
     bucket_region: str,
     dd: DeploymentDetails,
-    key: str | None = None,
+    template: str | None = None,
     scope: str | None = None,
 ) -> str:
 
-    if not key:
-        key = ""
+    if not template:
+        template = ""
 
-    return "https://s3-{}.amazonaws.com/{}/{}".format(
-        bucket_region,
-        bucket_name,
-        dd.get_artefacts_key(key, scope)
-    )
+    store = util.get_storage_volume(bucket_region)
+
+    sep = "/" if util.is_use_s3() else os.path.sep
+
+    return f"{store}{sep}{bucket_name}{sep}{dd.get_artefacts_key(template, scope)}"
 
 
-def upload_actions(
-    bucket: Any, upload_prefix: str, actions_string: str, sep: str = "/"
-) -> tuple[str, str]:
+def upload_actions(task_payload: TaskPayload, actions_body: str) -> tuple[str, str]:
     """
-    Upload actions to S3.
+    Upload the compiled actions to the target defined in deployment details
 
     Args:
-        bucket (Any): The S3 bucket boto3 resource.
-        upload_prefix (str): The upload prefix path
-        actions_string (str): The actions file contents.
+        task_payload (dict): The task payload contianng the deployment details and package details
+        actions_output (str): The compiled actions in yaml or JSON format
 
+    Returns:
+        tuple: returns the action key and version
     """
-    task = "deploy"
 
-    actions_key = f"{upload_prefix}{sep}{task}.actions"
+    actions_details = task_payload.Actions
+    bucket_name = actions_details.BucketName
+    bucket_region = actions_details.BucketRegion
 
-    log.debug("Uploading file to automation bucket (key: {})".format(actions_key))
+    actions_key = actions_details.Key
 
+    log.debug(
+        "Uploading actions file to actions bucket [{}]: (key: {})",
+        bucket_name,
+        actions_key,
+    )
+
+    bucket = MagicS3Client.get_bucket(Region=bucket_region, BucketName=bucket_name)
     object = bucket.put_object(
-        Body=actions_string.encode("utf-8"),
+        Body=actions_body.encode("utf-8"),
         Key=actions_key,
         ServerSideEncryption="AES256",
         ACL="bucket-owner-full-control",
     )
     actions_version = object.version_id
 
+    task_payload.Actions.VersionId = actions_version
+
     return actions_key, actions_version
 
 
-def apply_state(deployspec_contents: str, state: dict) -> str:
+def get_context(task_payload: TaskPayload) -> dict:
     """
-    Apply state to the deployspec contents.  Uses Jinja Template to render the state.
+    Get the context for the Jinja2 templating
+
+    Args:
+        task_payload (TaskPayload): The task payload object
+
+    Returns:
+        dict: The context for the Jinja2 templating
+    """
+    deployment_details = task_payload.DeploymentDetails
+
+    try:
+        # Get the facts for the deployment
+        state = get_facts(deployment_details)
+    except Exception as e:
+        log.error("Error getting facts for deployspec context: {}", e)
+        raise
+
+    return {CONTEXT_ROOT: state}
+
+
+def apply_context(actions_list: list[dict], context: dict) -> str:
+    """
+    Apply state to the ctions list.  Uses Jinja Template to render the state.
 
     Args:
         deployspec_contents (str): The deployspec file contents.
@@ -448,11 +489,17 @@ def apply_state(deployspec_contents: str, state: dict) -> str:
     Returns:
         str: The deployspec file contents with the state modifiecations applied
     """
-    # Create a Jinja2 template from the deployspec contents
-    template = Template(deployspec_contents)
 
-    # Render the template with the provided state
-    rendered_contents = template.render(core=state["core"])
+    unrendered_contents = util.to_yaml(actions_list)
+
+    # Create a Jinja2 template from the deployspec contents
+    template = Template(unrendered_contents)
+
+    # Render the template with the provided state.  I don't know
+    # if the root should be "core" or if the root should be "context".
+    # If we change the root to "context", then we need to change the
+    # input to template.render(context=context[CONTEXT_ROOT])
+    rendered_contents = template.render(core=context[CONTEXT_ROOT])
 
     return rendered_contents
 
@@ -518,6 +565,8 @@ def __apply_syntax_update(stack_parameters: dict | None) -> dict | None:
     if not stack_parameters:
         return None
 
+    # NOTE:  See this is expecting "core" to be the root.
+    # See the "apply_state" function.  It's not clear if the root should be "core" or "context".
     for key in stack_parameters:
         stack_parameters[key] = re.sub(
             r"{{ (?!core.)([^.]*)\.(.*) }}",
@@ -604,25 +653,3 @@ def __get_stack_scope(stack_name: str) -> str:
     log.debug("Build scope={}, stack_name={}", scope, stack_name)
 
     return scope
-
-
-def to_yaml(data: list[dict]) -> str:
-    """
-    Dump to a yaml string with some sane defaults.
-
-    Args:
-        data (dict): The data to dump to yaml.
-
-    Returns:
-        str: The yaml string.
-
-    """
-    y = yaml.YAML(typ="rt")
-    y.default_flow_style = False
-    y.allow_unicode = True
-    y.indent(mapping=2, sequence=2, offset=0)
-
-    s = io.StringIO()
-    y.dump(data, s)
-
-    return s.getvalue()

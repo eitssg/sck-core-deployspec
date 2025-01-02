@@ -1,107 +1,188 @@
-import os
-from pydantic import ValidationError
 import pytest
+import re
+import os
+
+from pydantic import ValidationError
 
 import core_framework as util
-from core_deployspec.handler import handler
 
-from core_framework.models import DeploymentDetails, PackageDetails, TaskPayload
-from core_framework.constants import V_PACKAGE_ZIP, V_DEPLOYSPEC_FILE_YAML
+from core_db.facter import get_facts
+
+from core_framework.models import TaskPayload, PackageDetails
+from core_framework.constants import (
+    V_PACKAGE_ZIP,
+    V_DEPLOYSPEC_FILE_YAML,
+    V_PLANSPEC_FILE_YAML,
+    V_APPLYSPEC_FILE_YAML,
+)
+
+from core_helper.magic import MagicS3Client
+
+from .data_for_testing import initialize
+
+from core_deployspec import compiler as deployspec_compiler
 
 
-@pytest.fixture
-def runtime_arguments():
+@pytest.fixture(scope="module")
+def arguments():
 
-    # These typically come from environment variables or command line arguments
-    client = util.get_client()
-    data_dir = util.get_storage_volume()
+    client = util.get_client()  # from the --client paramter
+    portfolio = "my-portfolio"  # from the -p, --portfolio parameter
+    app = "my-app"  # from the -a, --app parameter
+    branch = "my-branch"  # from the -b --branch parameter
+    build = "dp-build"  # from the -i, --build parameter
 
-    # These typically come from environment variables or command line arguments
-    # The bucket name is the standard core-automation folder name
-    bucket_name = util.get_bucket_name()
+    # Remember 3 tasks are supported: deploy, plan, apply"
+    # you will need to upload the appropriate files in your package.
+    # deployspec.yaml, planspec.yaml, applyspec.yaml
+    # Each spec must contain the appropriate actions for the task.
 
-    artefact_path = os.path.join(
-        data_dir,
-        bucket_name,
-        "packages",
-        "my-portfolio",
-        "my-app",
-        "my-branch",
-        "my-build",
-    )
+    task = "deploy"  # or "plan", or "apply", or "teardown"
 
-    os.makedirs(artefact_path, exist_ok=True)
-
-    zipfilename = os.path.join(artefact_path, V_PACKAGE_ZIP)
-
-    dirname = os.path.dirname(os.path.realpath(__file__))
-
-    # create or update our test package zip with our test deployspec.yaml file.
-    os.system(
-        f"cd {dirname} && 7z a {zipfilename} {V_DEPLOYSPEC_FILE_YAML} template.yaml"
-    )
-
-    return {
+    state = {
+        "task": task,
         "client": client,
-        "portfolio": "my-portfolio",
-        "app": "my-app",
-        "branch": "my-branch",
-        "build": "my-build",
-        "mode": "local",
+        "portfolio": portfolio,
+        "app": app,
+        "branch": branch,
+        "build": build,
     }
 
-
-@pytest.fixture
-def deployment_details(runtime_arguments: dict):
-
-    deployment_details = DeploymentDetails.from_arguments(**runtime_arguments)
-
-    return deployment_details
+    return state
 
 
-@pytest.fixture
-def task_payload(runtime_arguments: dict, deployment_details: DeploymentDetails):
+@pytest.fixture(scope="module")
+def package_package():
 
-    task_payload = TaskPayload.from_arguments(
-        deployment_details=deployment_details, **runtime_arguments
+    # Typical lifecycle is: -> package -> upload -> compile -> deploy -> teardown
+    # This is the "package" step.  Create the zip file
+
+    dirname = os.path.dirname(os.path.realpath(__file__))
+    fn = os.path.join(dirname, V_PACKAGE_ZIP)
+
+    # set current working directory to the location of this file
+    os.system(
+        f"cd {dirname} && 7z a {fn} {V_DEPLOYSPEC_FILE_YAML} "
+        f"{V_PLANSPEC_FILE_YAML} {V_APPLYSPEC_FILE_YAML} "
+        "template.yaml"
     )
+
+    # Remember 3 tasks are supported: deploy, plan, apply"
+    # you will need to upload the appropriate files in your package.
+    # deployspec.yaml, planspec.yaml, applyspec.yaml
+    # Each spec must contain the appropriate actions for the task.
+
+    return fn
+
+
+@pytest.fixture(scope="module")
+def task_payload(arguments: dict) -> TaskPayload:
+
+    assert isinstance(arguments, dict)
+
+    # Typical lifecycle is: -> package -> upload -> compile -> deploy -> teardown
+    # This is the "deploy" step
+
+    task_payload = TaskPayload.from_arguments(**arguments)
 
     return task_payload
 
 
-@pytest.fixture
-def package_details(runtime_arguments: dict, deployment_details: DeploymentDetails):
+@pytest.fixture(scope="module")
+def upload_package(task_payload: TaskPayload, package_package: str) -> PackageDetails:
 
-    package_details = PackageDetails.from_arguments(
-        **{"deployment_details": deployment_details, **runtime_arguments}
+    assert isinstance(task_payload, TaskPayload)
+    assert isinstance(package_package, str)
+
+    # Typical lifecycle is: -> package -> upload -> compile -> deploy | plan -> deploy | apply -> teardown
+    # This is the "upload" step
+
+    # arguments are collected from the commandline.
+
+    state_details = task_payload.Package
+
+    bucket = MagicS3Client(Region=state_details.BucketRegion).Bucket(
+        state_details.BucketName
     )
 
-    return package_details
+    try:
+        # package.zip should be small.  The whole thing is read into memory.  a few MB is ok.  but 100MB is not.
+        with open(package_package, "rb") as f:
+            bucket.put_object(Key=state_details.Key, Body=f.read())
+    except Exception as e:
+        print(e)
+        pytest.fail("Failed to upload package")
+
+    # we return the task action
+
+    return task_payload.Package
 
 
-def test_deployspec_compiler(task_payload: TaskPayload):
+@pytest.fixture(scope="module")
+def facts(task_payload: TaskPayload, arguments: dict):
+
+    cf, zf, pf, af = initialize(arguments)
+
+    deployment_details = task_payload.DeploymentDetails
+
+    facts = get_facts(deployment_details)
+
+    assert facts is not None
+
+    assert facts["Client"] == cf.Client
+    assert facts["Portfolio"] == pf.Portfolio
+    assert facts["Zone"] == zf.Zone
+    assert facts["AppRegex"] == af.AppRegex
+
+    assert re.match(facts["AppRegex"], deployment_details.get_identity())
+
+    state_details = task_payload.State
+
+    body = util.to_yaml(facts)
+
+    bucket = MagicS3Client(Region=state_details.BucketRegion).Bucket(
+        state_details.BucketName
+    )
 
     try:
-        assert task_payload is not None
+        bucket.put_object(Key=state_details.Key, Body=body)
+    except Exception as e:
+        print(e)
+        pytest.fail("Failed to upload state {}".format(state_details.Key))
 
-        event = task_payload.model_dump()
+    return facts
 
-        result = handler(event, None)
+
+def test_deployspec_compiler(
+    task_payload: TaskPayload,
+    upload_package: PackageDetails,
+    facts: dict,
+    arguments: dict,
+):
+
+    # Typical lifecycle is: -> package -> upload -> compile-> deploy -> teardown
+    # This is the "compile" and "deploy" steps
+
+    try:
+        assert isinstance(facts, dict)
+        assert isinstance(arguments, dict)
+        assert isinstance(task_payload, TaskPayload)
+        assert isinstance(upload_package, PackageDetails)
+
+        # The next steps after package -> upload are compile -> deploy which are handled in the handler
+        result = deployspec_compiler(task_payload.model_dump(), None)
 
         assert result is not None
 
-        assert "Artefact" in result
+        assert "Response" in result
 
-        assert result["Artefact"]["Scope"] == "deployspec"
+        response = result["Response"]
 
-        assert result["Artefact"]["Key"] == os.path.join(
-            "artefacts",
-            "my-portfolio",
-            "my-app",
-            "my-branch",
-            "my-build",
-            "deploy.actions",
-        )
+        assert "Artefact" in response
+
+        assert (
+            response["Artefact"]["Scope"] == "deployspec"
+        )  # or "planspec", or "applyspec"
 
     except ValidationError as e:
         print(e.errors())
