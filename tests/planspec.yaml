@@ -1,0 +1,11 @@
+- label: test1-create-change-set
+  type: create_change_set
+  params:
+    stack_name: my-first-stack
+    template: template.yaml
+    parameters:
+      build: 12345
+    accounts:
+      - 123456789012
+    regions:
+      - us-east-1

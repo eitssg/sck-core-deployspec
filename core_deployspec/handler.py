@@ -2,6 +2,8 @@ from typing import Any
 
 import core_logging as log
 
+import core_framework as util
+
 from core_framework.constants import (
     TP_DEPLOYMENT_DETAILS,
     TR_RESPONSE,
@@ -13,10 +15,12 @@ from .compiler import (
     compile_deployspec,
     load_deployspec,
     upload_actions,
+    upload_state,
     get_context,
+    CONTEXT_ROOT
 )
 
-from core_framework.models import TaskPayload, ActionDefinition
+from core_framework.models import TaskPayload
 
 
 def handler(event: dict, context: Any | None) -> dict:
@@ -49,8 +53,6 @@ def handler(event: dict, context: Any | None) -> dict:
 
     """
 
-    log.debug("event", details=event)
-
     try:
         task_payload = TaskPayload(**event)
 
@@ -58,30 +60,51 @@ def handler(event: dict, context: Any | None) -> dict:
 
         log.setup(deployment_details.get_identity())
 
-        log.status(
-            COMPILE_IN_PROGRESS,
-            "Deployspec compilation started",
-            details={"Scope": "deployspec"},
-        )
-        deployspec = load_deployspec(task_payload)
+        log.debug("Task Payload: ", details=event)
 
-        # Compile the deployspec into actions
-        actions: list[ActionDefinition] = compile_deployspec(task_payload, deployspec)
-
-        log.debug("Finalizing Templates.  Jinja2 templating.")
+        log.status(COMPILE_IN_PROGRESS, "Deployspec compilation started")
 
         # Get the Jinja2 context for variable replacment if Jinja is in the the text.
         context = get_context(task_payload)
 
-        actions_list = [a.model_dump(exclude_none=True) for a in actions]
+        # Read all the deployspecs from the task payload package
+        specs = load_deployspec(task_payload)
 
-        # Apply the context and finalize output.  Expect the final yaml output.
-        actions_output = apply_context(actions_list, context)
+        artefact_info = []
 
-        # Upload the compiled actions to the target defined specified by the deployment details
-        key, version = upload_actions(task_payload, actions_output)
+        # Compile all deployspecs in the package (deployspec, teardownspec, planspec, applyspec)
+        for task, spec in specs.items():
 
-        artefact_info = {"Scope": "deployspec", "Key": key, "Version": version}
+            task_payload.Task = task
+
+            log.debug(f"{task.capitalize()}spec", details=spec.model_dump())
+
+            # Compile the deployspec into actions
+            actions = compile_deployspec(task_payload, spec)
+
+            log.debug("Finalizing Templates.  Jinja2 templating.")
+
+            actions_list = [a.model_dump(exclude_none=True) for a in actions]
+
+            # Apply the context and finalize output.  Expect the final yaml output.
+            actions_output = apply_context(actions_list, context)
+
+            # Upload the compiled actions to the target defined specified by the deployment details
+            key, version = upload_actions(task_payload.Actions, actions_output)
+
+            artefact_info.append(
+                {"Scope": f"{task}spec", "Key": key, "Version": version}
+            )
+
+            # Get the facts from the context
+            state_output = util.to_yaml(context[CONTEXT_ROOT])
+
+            # Save the initial state facts for the deployment
+            key, version = upload_state(task_payload.State, state_output)
+
+            artefact_info.append(
+                {"Scope": f"{task}spec", "Key": key, "Version": version}
+            )
 
         log.status(
             COMPILE_COMPLETE,

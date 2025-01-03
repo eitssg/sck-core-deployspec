@@ -1,26 +1,26 @@
-- label: test1-create-user
-  type: aws.create_user
-  params:
-    user_name: bob
-    account: 123456789012
-    region: us-east-1
-  depends_on:
 - label: test1-delete-user
   type: aws.delete_user
   params:
     user_name: bob
     account: 123456789012
     region: us-east-1
-  depends_on: test1-create-user
-- label: test1-create-stack
-  type: create_stack
+- label: test1-delete-stack
+  type: delete_stack
   params:
     stack_name: my-first-stack
-    template: template.yaml
     parameters:
       build: 12345
     accounts:
       - 123456789012
     regions:
       - us-east-1
-  depends_on:
+- label: test1-delete-change-set
+  type: delete_change_set
+  params:
+    stack_name: my-first-stack
+    parameters:
+      build: 12345
+    accounts:
+      - 123456789012
+    regions:
+      - us-east-1

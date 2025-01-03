@@ -1,0 +1,8 @@
+- label: test1-create-change-set
+  type: apply_change_set
+  params:
+    stack_name: my-first-stack
+    accounts:
+      - 123456789012
+    regions:
+      - us-east-1

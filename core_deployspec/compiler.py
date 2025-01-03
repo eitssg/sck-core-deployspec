@@ -9,7 +9,6 @@ import io
 import os
 import re
 import zipfile as zip
-from ruamel import yaml
 import json
 import core_logging as log
 
@@ -32,6 +31,18 @@ from core_framework.constants import (
     TAG_BUILD,
     V_EMPTY,
     V_PACKAGE_ZIP,
+    V_DEPLOYSPEC_FILE_YAML,
+    V_DEPLOYSPEC_FILE_JSON,
+    V_PLANSPEC_FILE_YAML,
+    V_PLANSPEC_FILE_JSON,
+    V_APPLYSPEC_FILE_YAML,
+    V_APPLYSPEC_FILE_JSON,
+    V_TEARDOWNSPEC_FILE_YAML,
+    V_TEARDOWNSPEC_FILE_JSON,
+    TASK_PLAN,
+    TASK_DEPLOY,
+    TASK_APPLY,
+    TASK_TEARDOWN,
 )
 
 from core_db.facter import get_facts
@@ -43,6 +54,8 @@ from core_framework.models import (
     DeploySpec,
     ActionSpec,
     DeploymentDetails,
+    ActionDetails,
+    StateDetails,
 )
 
 from core_helper.magic import MagicS3Client
@@ -53,7 +66,7 @@ SpecLabelMapType = dict[str, list[str]]
 CONTEXT_ROOT = "core"
 
 
-def load_deployspec(task_payload: TaskPayload) -> DeploySpec:
+def load_deployspec(task_payload: TaskPayload) -> dict[str, DeploySpec]:
     """
     Process package For local mode.
 
@@ -95,31 +108,14 @@ def load_deployspec(task_payload: TaskPayload) -> DeploySpec:
 
     # We have read the entire zip file into memory.  I hope it's not too big!!
     # Process the zip file and extract the deployspec file.
-    spec = process_package_zip(task_payload, zip_fileobj, os.path.sep)
+    spec = process_package_zip(task_payload, zip_fileobj)
 
     # Mutate package_details to include the DeploySpec
 
     return spec
 
 
-def get_deployment_type(task: str) -> str:
-    if task == "deploy":
-        return "deployspec"
-    elif task == "plan":
-        return "planspec"
-    elif task == "apply":
-        return "applyspec"
-    elif task == "teardown":
-        return "teardownspec"
-    else:
-        raise ValueError(f"Invalid task: {task}")
-
-
-def process_package_zip(
-    task_payload: TaskPayload,
-    zip_fileobj: io.BytesIO,
-    sep: str = "/",
-) -> DeploySpec:
+def process_package_zip(task_payload: TaskPayload, zip_fileobj: io.BytesIO) -> dict[str, DeploySpec]:
     """
     Process the zip package copying content to the artefacts store while extraction the actions
     into a DeploySpec object. (plan, appl, deploy, or teardown)
@@ -129,7 +125,6 @@ def process_package_zip(
         bucket (Any): a MagicBucket or boto3 bucket object
         upload_prefix (str): where in the store to upload
         deployment_type (str): deployspec, planspec, applyspec, teardownspec
-        sep (str, optional): zip files will have "/", do we replace?. Defaults to "/".
 
     Raises:
         Exception: if the package does not contain a deployspec file or is malformed.
@@ -138,21 +133,19 @@ def process_package_zip(
         DeploySpec: the deployspec object with the deployspec, plansepec, applyspec, or teardownspec actions
     """
 
-    deployment_details = task_payload.DeploymentDetails
+    dd = task_payload.DeploymentDetails
 
     # Get the artefacts location
-    upload_prefix = deployment_details.get_artefacts_key()
+    upload_prefix = dd.get_artefacts_key()
 
     # Get the bucket details for artefacts which are in the Actions or State objects
     bucket_name = task_payload.Actions.BucketName
     bucket_region = task_payload.Actions.BucketRegion
 
-    deployment_type = get_deployment_type(task_payload.Task)
-
     # This will be returned and added to the task_payload packages
-    spec: DeploySpec | None = None
+    specs: dict[str, DeploySpec] = {}
 
-    zipfile = zip.ZipFile(zip_fileobj, "r")
+    zipfile_obj = zip.ZipFile(zip_fileobj, "r")
 
     log.debug(
         "Extracting {} and Uploading artefact to: {}", V_PACKAGE_ZIP, upload_prefix
@@ -160,46 +153,46 @@ def process_package_zip(
 
     bucket = MagicS3Client.get_bucket(Region=bucket_region, BucketName=bucket_name)
 
-    for name in zipfile.namelist():
+    spec_mapping = {
+        V_DEPLOYSPEC_FILE_YAML: (util.from_yaml, TASK_DEPLOY),
+        V_DEPLOYSPEC_FILE_JSON: (util.from_json, TASK_DEPLOY),
+        V_PLANSPEC_FILE_YAML: (util.from_yaml, TASK_PLAN),
+        V_PLANSPEC_FILE_JSON: (util.from_json, TASK_PLAN),
+        V_APPLYSPEC_FILE_YAML: (util.from_yaml, TASK_APPLY),
+        V_APPLYSPEC_FILE_JSON: (util.from_json, TASK_APPLY),
+        V_TEARDOWNSPEC_FILE_YAML: (util.from_yaml, TASK_TEARDOWN),
+        V_TEARDOWNSPEC_FILE_JSON: (util.from_json, TASK_TEARDOWN),
+    }
+
+    for name in zipfile_obj.namelist():
 
         # as we iterate through the files, look for the spec we are interested in
         # compiling.  This will be the deployspec, planspec, applyspec, or teardownspec
         # file.  We will also upload all files to the artefacts store for documentation purposes.
         # and return the spec for further processing.
-        if name == f"{deployment_type}.yaml":
-
-            log.info("Loading deployspec name={}", name)
-
-            y = yaml.YAML(typ="rt")
-            data = y.load(zipfile.read(name))
-            spec = DeploySpec(actions=data)
-
-        elif name == f"{deployment_type}.json":
-
-            log.info("Loading deployspec name={}", name)
-
-            data = json.loads(zipfile.read(name))
-            spec = DeploySpec(actions=data)
+        if name in spec_mapping:
+            log.info("Loading spec name={}", name)
+            process_func, task = spec_mapping[name]
+            data = process_func(zipfile_obj.read(name))
+            specs[task] = DeploySpec(actions=data)
 
         # Upload all files to the artefacts store for documentation purposes
         # and this includes the cloduformation templates needed for the actions.
 
-        key = f"{upload_prefix}{sep}{name}"
-        data = zipfile.read(name)
+        key = dd.get_artefacts_key(name)
+        data = zipfile_obj.read(name)
 
         log.info("Uploading file: {})", key)
 
         bucket.put_object(Key=key, Body=data, ServerSideEncryption="AES256")
 
     # Process deployspec
-    if not spec:
+    if not specs:
         raise Exception(
-            f"Package does not contain a {deployment_type} file, cannot continue"
+            "Package does not contain any deployspec files, cannot continue"
         )
 
-    task_payload.Package.DeploySpec = spec
-
-    return spec
+    return specs
 
 
 def get_accounts_regions(action_spec: ActionSpec) -> tuple[list[str], list[str]]:
@@ -418,23 +411,20 @@ def get_template_url(
     return f"{store}{sep}{bucket_name}{sep}{dd.get_artefacts_key(template, scope)}"
 
 
-def upload_actions(task_payload: TaskPayload, actions_body: str) -> tuple[str, str]:
+def upload_actions(action_details: ActionDetails, actions_body: str) -> tuple[str, str]:
     """
     Upload the compiled actions to the target defined in deployment details
 
     Args:
-        task_payload (dict): The task payload contianng the deployment details and package details
-        actions_output (str): The compiled actions in yaml or JSON format
+        action_details (ActionDetails): The action details object with the location of the action file
+        actions_body (str): The compiled actions in YAML or JSON format
 
     Returns:
         tuple: returns the action key and version
     """
-
-    actions_details = task_payload.Actions
-    bucket_name = actions_details.BucketName
-    bucket_region = actions_details.BucketRegion
-
-    actions_key = actions_details.Key
+    bucket_name = action_details.BucketName
+    bucket_region = action_details.BucketRegion
+    actions_key = action_details.Key
 
     log.debug(
         "Uploading actions file to actions bucket [{}]: (key: {})",
@@ -451,9 +441,44 @@ def upload_actions(task_payload: TaskPayload, actions_body: str) -> tuple[str, s
     )
     actions_version = object.version_id
 
-    task_payload.Actions.VersionId = actions_version
+    action_details.VersionId = actions_version
 
     return actions_key, actions_version
+
+
+def upload_state(state_details: StateDetails, state_body: str) -> tuple[str, str]:
+    """
+    Upload the facts to the state of the target defined in state details
+
+    Args:
+        state_details (StateDetails): The state details contianng location of the state
+        state_body (str): The YAML or JSON file contents of the state
+
+    Returns:
+        tuple: returns the action key and version
+    """
+    bucket_name = state_details.BucketName
+    bucket_region = state_details.BucketRegion
+    state_key = state_details.Key
+
+    log.debug(
+        "Uploading state file to actions bucket [{}]: (key: {})",
+        bucket_name,
+        state_key,
+    )
+
+    bucket = MagicS3Client.get_bucket(Region=bucket_region, BucketName=bucket_name)
+    object = bucket.put_object(
+        Body=state_body.encode("utf-8"),
+        Key=state_key,
+        ServerSideEncryption="AES256",
+        ACL="bucket-owner-full-control",
+    )
+    actions_version = object.version_id
+
+    # state_key.VersionId = actions_version
+
+    return state_key, actions_version
 
 
 def get_context(task_payload: TaskPayload) -> dict:

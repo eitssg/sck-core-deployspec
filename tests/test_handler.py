@@ -14,6 +14,7 @@ from core_framework.constants import (
     V_DEPLOYSPEC_FILE_YAML,
     V_PLANSPEC_FILE_YAML,
     V_APPLYSPEC_FILE_YAML,
+    V_TEARDOWNSPEC_FILE_YAML,
 )
 
 from core_helper.magic import MagicS3Client
@@ -27,25 +28,25 @@ from core_deployspec import compiler as deployspec_compiler
 def arguments():
 
     client = util.get_client()  # from the --client paramter
+    task = "compile"  # from the "command" positional parameter
     portfolio = "my-portfolio"  # from the -p, --portfolio parameter
     app = "my-app"  # from the -a, --app parameter
     branch = "my-branch"  # from the -b --branch parameter
     build = "dp-build"  # from the -i, --build parameter
+    automation_type = "deployspec"  # from the --automation-type parameter
 
-    # Remember 3 tasks are supported: deploy, plan, apply"
-    # you will need to upload the appropriate files in your package.
-    # deployspec.yaml, planspec.yaml, applyspec.yaml
-    # Each spec must contain the appropriate actions for the task.
+    # commandline example:
 
-    task = "deploy"  # or "plan", or "apply", or "teardown"
+    # core --client my-client compile -p my-portfolio -a my-app -b my-branch -i dp-build --automation-type deployspec
 
     state = {
-        "task": task,
         "client": client,
+        "task": task,
         "portfolio": portfolio,
         "app": app,
         "branch": branch,
         "build": build,
+        "automation_type": automation_type,
     }
 
     return state
@@ -61,11 +62,17 @@ def package_package():
     fn = os.path.join(dirname, V_PACKAGE_ZIP)
 
     # set current working directory to the location of this file
-    os.system(
-        f"cd {dirname} && 7z a {fn} {V_DEPLOYSPEC_FILE_YAML} "
-        f"{V_PLANSPEC_FILE_YAML} {V_APPLYSPEC_FILE_YAML} "
-        "template.yaml"
+    files = " ".join(
+        [
+            V_DEPLOYSPEC_FILE_YAML,
+            V_PLANSPEC_FILE_YAML,
+            V_APPLYSPEC_FILE_YAML,
+            V_TEARDOWNSPEC_FILE_YAML,
+            "template.yaml",
+        ]
     )
+
+    os.system(f"cd {dirname} && 7z a {fn} " + files)
 
     # Remember 3 tasks are supported: deploy, plan, apply"
     # you will need to upload the appropriate files in your package.
@@ -136,20 +143,6 @@ def facts(task_payload: TaskPayload, arguments: dict):
 
     assert re.match(facts["AppRegex"], deployment_details.get_identity())
 
-    state_details = task_payload.State
-
-    body = util.to_yaml(facts)
-
-    bucket = MagicS3Client(Region=state_details.BucketRegion).Bucket(
-        state_details.BucketName
-    )
-
-    try:
-        bucket.put_object(Key=state_details.Key, Body=body)
-    except Exception as e:
-        print(e)
-        pytest.fail("Failed to upload state {}".format(state_details.Key))
-
     return facts
 
 
@@ -180,9 +173,13 @@ def test_deployspec_compiler(
 
         assert "Artefact" in response
 
+        artefact_iist = response["Artefact"]
+
+        assert len(artefact_iist), "There are no artefacts returned!! We expected some artefacts"
+
         assert (
-            response["Artefact"]["Scope"] == "deployspec"
-        )  # or "planspec", or "applyspec"
+            artefact_iist[0]["Scope"] in ["deployspec", "planspec", "applyspec", "teardownspec"]
+        )
 
     except ValidationError as e:
         print(e.errors())
