@@ -115,7 +115,9 @@ def load_deployspec(task_payload: TaskPayload) -> dict[str, DeploySpec]:
     return spec
 
 
-def process_package_zip(task_payload: TaskPayload, zip_fileobj: io.BytesIO) -> dict[str, DeploySpec]:
+def process_package_zip(
+    task_payload: TaskPayload, zip_fileobj: io.BytesIO
+) -> dict[str, DeploySpec]:
     """
     Process the zip package copying content to the artefacts store while extraction the actions
     into a DeploySpec object. (plan, appl, deploy, or teardown)

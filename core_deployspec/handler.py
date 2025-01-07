@@ -17,7 +17,7 @@ from .compiler import (
     upload_actions,
     upload_state,
     get_context,
-    CONTEXT_ROOT
+    CONTEXT_ROOT,
 )
 
 from core_framework.models import TaskPayload

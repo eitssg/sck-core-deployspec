@@ -175,11 +175,16 @@ def test_deployspec_compiler(
 
         artefact_iist = response["Artefact"]
 
-        assert len(artefact_iist), "There are no artefacts returned!! We expected some artefacts"
+        assert len(
+            artefact_iist
+        ), "There are no artefacts returned!! We expected some artefacts"
 
-        assert (
-            artefact_iist[0]["Scope"] in ["deployspec", "planspec", "applyspec", "teardownspec"]
-        )
+        assert artefact_iist[0]["Scope"] in [
+            "deployspec",
+            "planspec",
+            "applyspec",
+            "teardownspec",
+        ]
 
     except ValidationError as e:
         print(e.errors())
