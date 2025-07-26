@@ -1,7 +1,14 @@
+"""
+Lambda handler for deployspec compilation.
+
+This module handles the compilation of deployment specifications into executable actions,
+applies Jinja2 templating with deployment context, and coordinates execution of the
+compiled actions through the core_execute module.
+"""
+
 from typing import Any
 
 import core_logging as log
-
 import core_framework as util
 
 from core_framework.constants import (
@@ -9,120 +16,172 @@ from core_framework.constants import (
     TR_RESPONSE,
 )
 from core_framework.status import COMPILE_FAILED, COMPILE_COMPLETE, COMPILE_IN_PROGRESS
+from core_execute.handler import invoke_execute_handler
 
 from .compiler import (
     apply_context,
     compile_deployspec,
     load_deployspec,
-    upload_actions,
-    upload_state,
     get_context,
-    CONTEXT_ROOT,
 )
 
-from core_framework.models import TaskPayload
+# Add imports for save_actions and save_state from core_execute
+from core_execute.execute import save_actions, save_state
+
+from core_framework.models import ActionSpec, TaskPayload
 
 
 def handler(event: dict, context: Any | None) -> dict:
     """
-    Lambda handler function.
+    Lambda handler function for deployspec compilation.
 
-    The event object MUST be a TaskPayload object.
+    Processes deployment specifications, compiles them into executable actions,
+    applies Jinja2 templating with deployment context, and coordinates execution.
 
-        ```python
-        # Creating from commandline arguments
-        task_payload = TaskPayload.from_arguments(**kwargs)
+    :param event: Lambda event containing TaskPayload data
+    :type event: dict
+    :param context: Lambda context object (unused)
+    :type context: Any | None
+    :returns: Compilation response with summary and deployment details
+    :rtype: dict
+    :raises Exception: For compilation or execution failures
 
-        # Creating from a task_payload dictionary
-        task_paylpad = TaskPayload(**event)
-
-        # Creating from a task_payload dictionary
-        event = task_payload.model_dump()
-        ```
-
-    The lambda invokder should be called with a TaskPayload dictionary object.
-
-    This function returns with Task Response { "Response": "..." }
-
-    Args:
-        event (dict): The event object / a task payload dictionary
-        context (Any, optional): The context object
-
-    Returns:
-        dict: The Task Response object { "Response": "..." }
-
+    Examples
+    --------
+    >>> event = {
+    ...     "deployment_details": {...},
+    ...     "package": {"bucket_name": "my-bucket", "key": "package.zip"},
+    ...     "task": "deploy"
+    ... }
+    >>> response = handler(event, None)
+    >>> # Returns: {"TaskResponse": {"status": "COMPILE_COMPLETE", ...}}
     """
 
     try:
         task_payload = TaskPayload(**event)
-
-        deployment_details = task_payload.DeploymentDetails
+        deployment_details = task_payload.deployment_details
 
         log.setup(deployment_details.get_identity())
-
         log.debug("Task Payload: ", details=event)
-
         log.status(COMPILE_IN_PROGRESS, "Deployspec compilation started")
 
-        # Get the Jinja2 context for variable replacment if Jinja is in the the text.
-        context = get_context(task_payload)
+        # Get the Jinja2 context for variable replacement
+        context_data = get_context(task_payload)
 
         # Read all the deployspecs from the task payload package
         specs = load_deployspec(task_payload)
 
-        artefact_info = []
+        compilation_summary = {
+            "specs_found": list(specs.keys()),
+            "specs_compiled": [],
+            "total_actions_generated": 0,
+            "compilation_status": "success",
+        }
 
-        # Compile all deployspecs in the package (deployspec, teardownspec, planspec, applyspec)
+        task_payloads: list[TaskPayload] = []
+
+        log.debug("Compiling deployspecs", details=specs)
+
+        # Compile all deployspecs in the package (deploy, teardown, plan, apply)
         for task, spec in specs.items():
 
-            task_payload.Task = task
+            # Create a new task-specific payload by copying the original
+            task_specific_payload = TaskPayload(**task_payload.model_dump(exclude_none=True))
+            task_specific_payload.task = task
+            task_payloads.append(task_specific_payload)  # Fixed: append the task_specific_payload
 
-            log.debug(f"{task.capitalize()}spec", details=spec.model_dump())
+            log.debug(f"Processing task: {task}", details=spec.model_dump())
 
             # Compile the deployspec into actions
-            actions = compile_deployspec(task_payload, spec)
+            actions: list[ActionSpec] = compile_deployspec(task_specific_payload, spec)
 
-            log.debug("Finalizing Templates.  Jinja2 templating.")
+            log.debug("Finalizing Templates. Jinja2 templating.")
 
-            actions_list = [a.model_dump(exclude_none=True) for a in actions]
+            # Apply the context and finalize output
+            actions_output: list[ActionSpec] = apply_context(actions, context_data)
 
-            # Apply the context and finalize output.  Expect the final yaml output.
-            actions_output = apply_context(actions_list, context)
+            save_actions(task_specific_payload, actions_output)
 
-            # Upload the compiled actions to the target defined specified by the deployment details
-            key, version = upload_actions(task_payload.Actions, actions_output)
+            # Save state (progressive commits)
+            save_state(task_specific_payload, context_data)
 
-            artefact_info.append(
-                {"Scope": f"{task}spec", "Key": key, "Version": version}
-            )
-
-            # Get the facts from the context
-            state_output = util.to_yaml(context[CONTEXT_ROOT])
-
-            # Save the initial state facts for the deployment
-            key, version = upload_state(task_payload.State, state_output)
-
-            artefact_info.append(
-                {"Scope": f"{task}spec", "Key": key, "Version": version}
-            )
+            # Update compilation summary
+            compilation_summary["specs_compiled"].append(task)
+            compilation_summary["total_actions_generated"] += len(actions_output)
 
         log.status(
             COMPILE_COMPLETE,
             "Deployspec compilation successful",
-            details=artefact_info,
+            details=compilation_summary,
         )
+
+        execution_results = []
+
+        # Execute each task payload (DO I DO THIS HERE OR IS THIS COMPILER SIMPLY UPLOADING TO S3?)
+        for task_payload_item in task_payloads:  # Fixed: renamed variable to avoid conflict
+            try:
+                response = invoke_execute_handler(task_payload_item)
+                execution_results.append({
+                    "task": task_payload_item.task, 
+                    "status": "success", 
+                    "response": response
+                })
+            except Exception as e:
+                log.error(f"Execution failed for task {task_payload_item.task}: {str(e)}")
+                execution_results.append({
+                    "task": task_payload_item.task, 
+                    "status": "failed", 
+                    "error": str(e)
+                })
+                # Removed duplicate invoke_execute_handler call
+
+        # Return the final response
+        log.debug("Returning compilation summary", details=compilation_summary)
 
         return {
             TR_RESPONSE: {
                 TP_DEPLOYMENT_DETAILS: deployment_details.model_dump(),
-                "Artefact": artefact_info,
+                "compilation_summary": compilation_summary,
+                "execution_results": execution_results,  # Added execution results to response
+                "task_payload": {
+                    "deployment_id": task_payload.deployment_details.deployment_id,
+                    "organization": task_payload.deployment_details.organization,
+                    "environment": task_payload.deployment_details.environment,
+                    "tasks": [tp.task for tp in task_payloads],  # Fixed: lowercase 'tasks'
+                },
+                "status": "COMPILE_COMPLETE",
+                "message": f"Successfully compiled {len(compilation_summary['specs_compiled'])} deployspec(s)",
             }
         }
 
     except Exception as e:
+        # Enhanced error handling with context
+        error_details = {
+            "error_type": type(e).__name__,
+            "error_message": str(e),
+            "compilation_status": "failed",
+        }
+
+        # Add context if available
+        try:
+            if "task_payload" in locals():
+                error_details["deployment_id"] = task_payload.deployment_details.deployment_id
+                error_details["organization"] = task_payload.deployment_details.organization
+            if "compilation_summary" in locals():
+                error_details["specs_compiled_before_failure"] = compilation_summary["specs_compiled"]
+        except Exception as context_error:  # Fixed: catch specific exception instead of bare except
+            log.warning(f"Failed to add error context: {str(context_error)}")
+
         log.status(
             COMPILE_FAILED,
             "Deployspec compilation failed",
-            details={"Scope": "deployspec", "Error": str(e)},
+            details=error_details,
         )
-        raise
+
+        return {
+            TR_RESPONSE: {
+                "status": "COMPILE_FAILED",
+                "error": error_details,
+                "message": f"Deployspec compilation failed: {str(e)}",
+            }
+        }

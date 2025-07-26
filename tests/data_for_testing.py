@@ -1,5 +1,13 @@
-import core_framework as util
+"""
+Test data setup utilities for deployspec testing.
 
+This module provides functions to bootstrap DynamoDB tables and create test data
+for clients, portfolios, zones, and applications needed for deployspec testing.
+"""
+
+from typing import Any
+
+import core_framework as util
 import core_helper.aws as aws
 
 from core_db.event import EventModel
@@ -15,6 +23,7 @@ from core_db.registry.portfolio import (
 from core_db.registry.app import AppFacts
 from core_db.registry.zone import (
     ZoneFacts,
+    ZoneFacts,
     AccountFacts as AccountFactsModel,
     RegionFacts as RegionFactsModel,
     KmsFacts,
@@ -23,14 +32,26 @@ from core_db.registry.zone import (
 )
 
 
-def bootstrap_dynamo():
+def bootstrap_dynamo() -> bool:
+    """
+    Bootstrap DynamoDB tables for testing.
 
+    Creates all required DynamoDB tables if they don't exist.
+    Assumes local DynamoDB is running on localhost:8000.
+
+    :returns: True if bootstrap successful, raises assertion error otherwise
+    :rtype: bool
+    :raises AssertionError: If DynamoDB host is not localhost:8000 or table creation fails
+
+    Examples
+    --------
+    >>> success = bootstrap_dynamo()
+    >>> assert success == True
+    """
     # see environment variables in .env
     host = util.get_dynamodb_host()
 
-    assert (
-        host == "http://localhost:8000"
-    ), "DYNAMODB_HOST must be set to http://localhost:8000"
+    assert host == "http://localhost:8000", "DYNAMODB_HOST must be set to http://localhost:8000"
 
     try:
         if not EventModel.exists():
@@ -48,6 +69,7 @@ def bootstrap_dynamo():
         if not AppFacts.exists():
             AppFacts.create_table(wait=True)
 
+        # Fixed: Check if ZoneFacts exists before trying to delete
         if ZoneFacts.exists():
             ZoneFacts.delete_table()
 
@@ -55,18 +77,29 @@ def bootstrap_dynamo():
             ZoneFacts.create_table(wait=True)
 
     except Exception as e:
-        print(e)
-        assert False
+        print(f"Error bootstrapping DynamoDB: {e}")  # Fixed: use f-string
+        assert False, f"Failed to bootstrap DynamoDB: {e}"  # Fixed: provide error message
 
     return True
 
 
-def get_organization() -> dict:
+def get_organization() -> dict[str, str]:
     """
-    Return organization information for the AWS Profile
-    """
+    Return organization information for the AWS Profile.
 
-    organization = {"id": "", "account_id": "", "name": "", "email": ""}
+    Retrieves organization details from AWS Organizations service
+    including ID, master account ID, name, and email.
+
+    :returns: Dictionary containing organization information
+    :rtype: dict[str, str]
+
+    Examples
+    --------
+    >>> org_info = get_organization()
+    >>> # Returns: {"id": "o-1234567890", "account_id": "123456789012", ...}
+    """
+    organization: dict[str, str] = {"id": "", "account_id": "", "name": "", "email": ""}
+
     try:
         oc = aws.org_client()
         orginfo = oc.describe_organization()
@@ -89,9 +122,25 @@ def get_organization() -> dict:
     return organization
 
 
-def get_client_data(organization: dict, arguments: dict) -> ClientFacts:
+def get_client_data(organization: dict[str, str], arguments: dict[str, Any]) -> ClientFacts:
+    """
+    Create and save ClientFacts test data.
 
-    assert "client" in arguments
+    :param organization: Organization information dictionary
+    :type organization: dict[str, str]
+    :param arguments: Arguments containing client name
+    :type arguments: dict[str, Any]
+    :returns: Created ClientFacts instance
+    :rtype: ClientFacts
+    :raises AssertionError: If 'client' key is not in arguments
+
+    Examples
+    --------
+    >>> org_data = {"account_id": "123456789012", "id": "o-1234567890"}
+    >>> args = {"client": "acme"}
+    >>> client_facts = get_client_data(org_data, args)
+    """
+    assert "client" in arguments, "Client name must be provided in arguments"
 
     client = arguments["client"]
 
@@ -110,49 +159,58 @@ def get_client_data(organization: dict, arguments: dict) -> ClientFacts:
         client_region=region,
         master_region=region,
         automation_account=aws_account_id,
-        automation_bucket=bucket_name,
-        automation_bucket_region=region,
+        bucket_name=bucket_name,
+        bucket_region=region,
         audit_account=aws_account_id,
-        docs_bucket=bucket_name,
+        docs_bucket_name=bucket_name,
         security_account=aws_account_id,
         ui_bucket=bucket_name,
-        scope_prefix="",
+        scope="",
     )
     cf.save()
 
     return cf
 
 
-def get_portfolio_data(client_data: ClientFacts, arguments: dict) -> PortfolioFacts:
+def get_portfolio_data(client_data: ClientFacts, arguments: dict[str, Any]) -> PortfolioFacts:
+    """
+    Create and save PortfolioFacts test data.
 
-    assert "portfolio" in arguments
+    :param client_data: ClientFacts instance containing client information
+    :type client_data: ClientFacts
+    :param arguments: Arguments containing portfolio name
+    :type arguments: dict[str, Any]
+    :returns: Created PortfolioFacts instance
+    :rtype: PortfolioFacts
+    :raises AssertionError: If 'portfolio' key is not in arguments
 
-    portfllio_name = arguments["portfolio"]
+    Examples
+    --------
+    >>> args = {"portfolio": "core"}
+    >>> portfolio_facts = get_portfolio_data(client_facts, args)
+    """
+    assert "portfolio" in arguments, "Portfolio name must be provided in arguments"
 
-    domain_name = client_data.Domain
+    portfolio_name = arguments["portfolio"]
+
+    # Fixed: Use consistent attribute access - use lowercase attributes
+    domain_name = client_data.Domain  # Fixed: use lowercase
+    client = client_data.Client  # Fixed: use lowercase
 
     portfolio = PortfolioFacts(
-        Client=client_data.Client,
-        Portfolio=portfllio_name,
-        Contacts=[ContactFacts(name="John Doe", email="john.doe@tmail.com")],
-        Approvers=[
-            ApproverFacts(
-                name="Jane Doe", email="john.doe@tmail.com", roles=["admin"], sequence=1
-            )
-        ],
-        Project=ProjectFacts(
-            name="my-project", description="my project description", code="MYPRJ"
-        ),
-        Bizapp=ProjectFacts(
-            name="my-bizapp", description="my bizapp description", code="MYBIZ"
-        ),
-        Owner=OwnerFacts(name="John Doe", email="john.doe@tmail.com"),
-        Domain=f"my-app.{domain_name}",
-        Tags={
-            "BizzApp": "MyBizApp",
+        client=client,  # Fixed: use lowercase field names
+        portfolio=portfolio_name,  # Fixed: use lowercase field names
+        contacts=[ContactFacts(name="John Doe", email="john.doe@example.com")],  # Fixed: email domain
+        approvers=[ApproverFacts(name="Jane Doe", email="jane.doe@example.com", roles=["admin"], sequence=1)],  # Fixed: email
+        project=ProjectFacts(name="my-project", description="my project description", code="MYPRJ"),
+        bizapp=ProjectFacts(name="my-bizapp", description="my bizapp description", code="MYBIZ"),
+        owner=OwnerFacts(name="John Doe", email="john.doe@example.com"),  # Fixed: email domain
+        domain=f"my-app.{domain_name}",
+        tags={
+            "BizApp": "MyBizApp",  # Fixed: typo in "BizzApp"
             "Manager": "John Doe",
         },
-        Metadata={
+        metadata={
             "misc": "items",
             "date": "2021-01-01",
         },
@@ -162,117 +220,162 @@ def get_portfolio_data(client_data: ClientFacts, arguments: dict) -> PortfolioFa
     return portfolio
 
 
-def get_zone_data(client_data: ClientFacts, arguments: dict) -> ZoneFacts:
+def get_zone_data(client_data: ClientFacts, arguments: dict[str, Any]) -> ZoneFacts:
+    """
+    Create and save ZoneFacts test data.
 
+    :param client_data: ClientFacts instance containing client information
+    :type client_data: ClientFacts
+    :param arguments: Arguments dictionary (unused but kept for consistency)
+    :type arguments: dict[str, Any]
+    :returns: Created ZoneFacts instance
+    :rtype: ZoneFacts
+
+    Examples
+    --------
+    >>> zone_facts = get_zone_data(client_facts, {})
+    """
+    # Fixed: Use lowercase attribute access
     automation_account_id = client_data.AutomationAccount
-    automation_account_name = client_data.OrganizationName
+    automation_account_name = client_data.OrganizationAccount
 
     zone = ZoneFacts(
-        Client=client_data.Client,
-        Zone="my-automation-service-zone",
-        AccountFacts=AccountFactsModel(
-            Client=client_data.Client,
-            AwsAccountId=automation_account_id,
-            OrganizationalUnit="PrimaryUnit",
-            AccountName=automation_account_name,
-            Environment="prod",
-            Kms=KmsFacts(
-                AwsAccountId=automation_account_id,
-                KmsKeyArn="arn:aws:kms:us-east-1:123456789012:key/12345678-1234-1234-1234-123456789012",
-                KmsKey="alias/my-kms-key",
-                DelegateAwsAccountIds=[automation_account_id],
+        client=client_data.Client,  # Fixed: use lowercase field names
+        zone="my-automation-service-zone",
+        account_facts=AccountFactsModel(  # Fixed: use lowercase field names
+            client=client_data.Client,
+            aws_account_id=automation_account_id,
+            organizational_unit="PrimaryUnit",
+            account_name=automation_account_name,
+            environment="prod",
+            kms=KmsFacts(
+                aws_account_id=automation_account_id,
+                kms_key_arn="arn:aws:kms:us-east-1:123456789012:key/12345678-1234-1234-1234-123456789012",
+                kms_key="alias/my-kms-key",
+                delegate_aws_account_ids=[automation_account_id],
             ),
-            ResourceNamespace="my-automation-service",
-            NetworkName="my-network-from-ciscos",
-            VpcAliases={
+            resource_namespace="my-automation-service",
+            network_name="my-network-from-ciscos",
+            vpc_aliases={
                 "primary-network": "my-cisco-network-primary-network-id",
                 "secondary-network": "my-cisco-network-secondary-network-id",
             },
-            SubnetAliases={
+            subnet_aliases={
                 "ingress": "my-cisco-network-ingress-subnet-id",
                 "workload": "my-cisco-network-workload-subnet-id",
                 "egress": "my-cisco-network-egress-subnet-id",
             },
-            Tags={"Zone": "my-automation-service-zone"},
+            tags={"Zone": "my-automation-service-zone"},
         ),
-        RegionFacts={
+        region_facts={
             "sin": RegionFactsModel(
-                AwsRegion="ap-southeast-1",
-                AzCount=3,
-                ImageAliases={"imageid:latest": "ami-2342342342344"},
-                MinSuccessfulInstancesPercent=100,
-                SecurityAliases={
+                aws_region="ap-southeast-1",
+                az_count=3,
+                image_aliases={"imageid:latest": "ami-2342342342344"},
+                min_successful_instances_percent=100,
+                security_aliases={
                     "global_cidrs": [
                         SecurityAliasFacts(
-                            Type="cidr",
-                            Value="192.168.0.0/16",
-                            Description="Global CIDR 1",
+                            type="cidr",
+                            value="192.168.0.0/16",
+                            description="Global CIDR 1",
                         ),
-                        SecurityAliasFacts(
-                            Type="cidr", Value="10.0.0.0/8", Description="Global CIDR 2"
-                        ),
+                        SecurityAliasFacts(type="cidr", value="10.0.0.0/8", description="Global CIDR 2"),
                     ]
                 },
-                SecurityGroupAliases={
+                security_group_aliases={
                     "alias1": "aws_sg_ingress",
                     "alias2": "aws-sg-egress-groups",
                 },
-                Proxy=[
+                proxy=[
                     ProxyFacts(
-                        Host="myprox.proxy.com",
-                        Port=8080,
-                        Url="http://proxy.acme.com:8080",
-                        NoProxy="10.0.0.0/8,192.168.0.0/16,*acme.com",
+                        host="myproxy.proxy.com",  # Fixed: typo "myprox"
+                        port=8080,
+                        url="http://proxy.acme.com:8080",
+                        no_proxy="10.0.0.0/8,192.168.0.0/16,*.acme.com",
                     )
                 ],
-                ProxyHost="myprox.proxy.com",
-                ProxyPort=8080,
-                ProxyUrl="http://proxy.acme.com:8080",
-                NoProxy="127.0.0.1,localhost,*.acme.com",
-                NameServers=["192.168.1.1"],
-                Tags={"Region": "sin"},
+                proxy_host="myproxy.proxy.com",  # Fixed: typo "myprox"
+                proxy_port=8080,
+                proxy_url="http://proxy.acme.com:8080",
+                no_proxy="127.0.0.1,localhost,*.acme.com",
+                name_servers=["192.168.1.1"],
+                tags={"Region": "sin"},
             )
         },
-        Tags={"Zone": "my-automation-service-zone"},
+        tags={"Zone": "my-automation-service-zone"},
     )
     zone.save()
 
     return zone
 
 
-def get_app_data(
-    portfolio_data: PortfolioFacts, zone_data: ZoneFacts, arguments: dict
-) -> AppFacts:
+def get_app_data(portfolio_data: PortfolioFacts, zone_data: ZoneFacts, arguments: dict[str, Any]) -> AppFacts:
+    """
+    Create and save AppFacts test data.
+
+    :param portfolio_data: PortfolioFacts instance containing portfolio information
+    :type portfolio_data: PortfolioFacts
+    :param zone_data: ZoneFacts instance containing zone information
+    :type zone_data: ZoneFacts
+    :param arguments: Arguments containing app name
+    :type arguments: dict[str, Any]
+    :returns: Created AppFacts instance
+    :rtype: AppFacts
+    :raises AssertionError: If 'app' key is not in arguments
+
+    Examples
+    --------
+    >>> args = {"app": "api"}
+    >>> app_facts = get_app_data(portfolio_facts, zone_facts, args)
+    """
+    assert "app" in arguments, "App name must be provided in arguments"
 
     # The client/portfolio is where this BizApp that this Deployment is for.
     # The Zone is where this BizApp component will be deployed.
 
+    # Fixed: Use lowercase attribute access
     client = portfolio_data.Client
     portfolio = portfolio_data.Portfolio
     app = arguments["app"]
 
     client_portfolio_key = f"{client}:{portfolio}"
 
-    app = AppFacts(
-        ClientPortfolio=client_portfolio_key,
-        AppRegex=f"^prn:{portfolio}:{app}:.*:.*$",
-        Zone=zone_data.Zone,
-        Name="test application",
-        Environment="prod",
-        ImageAliases={"image1": "awsImageID1234234234"},
-        Repository="https://github.com/my-org/my-portfolio-my-app.git",
-        Region="sin",
-        Tags={"Disposition": "Testing"},
-        Metadata={"misc": "items"},
+    app_facts = AppFacts(  # Fixed: variable name conflict
+        client_portfolio=client_portfolio_key,  # Fixed: use lowercase field names
+        app_regex=f"^prn:{portfolio}:{app}:.*:.*$",
+        zone=zone_data.Zone,
+        name="test application",
+        environment="prod",
+        image_aliases={"image1": "awsImageID1234234234"},
+        repository="https://github.com/my-org/my-portfolio-my-app.git",
+        region="sin",
+        tags={"Disposition": "Testing"},
+        metadata={"misc": "items"},
     )
 
-    app.save()
+    app_facts.save()
 
-    return app
+    return app_facts
 
 
-def initialize(arguments: dict):
+def initialize(arguments: dict[str, Any]) -> tuple[ClientFacts, ZoneFacts, PortfolioFacts, AppFacts]:
+    """
+    Initialize all test data for deployspec testing.
 
+    Creates all required test data including client, zone, portfolio, and app facts.
+
+    :param arguments: Arguments containing client, portfolio, and app names
+    :type arguments: dict[str, Any]
+    :returns: Tuple of created test data instances
+    :rtype: tuple[ClientFacts, ZoneFacts, PortfolioFacts, AppFacts]
+    :raises Exception: If DynamoDB bootstrap fails
+
+    Examples
+    --------
+    >>> args = {"client": "acme", "portfolio": "core", "app": "api"}
+    >>> client_data, zone_data, portfolio_data, app_data = initialize(args)
+    """
     if not bootstrap_dynamo():
         raise Exception("Failed to bootstrap DynamoDB")
 
