@@ -65,7 +65,7 @@ def handler(event: dict, context: Any | None) -> dict:
         log.debug("Task Payload: ", details=event)
         log.status(COMPILE_IN_PROGRESS, "Deployspec compilation started")
 
-        # Get the Jinja2 context for variable replacement
+        # Get the Jinja2 context for variable replacement. A.k.a FACTS
         context_data = get_context(task_payload)
 
         # Read all the deployspecs from the task payload package
@@ -86,7 +86,7 @@ def handler(event: dict, context: Any | None) -> dict:
         for task, spec in specs.items():
 
             # Create a new task-specific payload by copying the original
-            task_specific_payload = TaskPayload(**task_payload.model_dump(exclude_none=True))
+            task_specific_payload = TaskPayload(**task_payload.model_dump())
             task_specific_payload.task = task
             task_payloads.append(task_specific_payload)  # Fixed: append the task_specific_payload
 
@@ -115,26 +115,6 @@ def handler(event: dict, context: Any | None) -> dict:
             details=compilation_summary,
         )
 
-        execution_results = []
-
-        # Execute each task payload (DO I DO THIS HERE OR IS THIS COMPILER SIMPLY UPLOADING TO S3?)
-        for task_payload_item in task_payloads:  # Fixed: renamed variable to avoid conflict
-            try:
-                response = invoke_execute_handler(task_payload_item)
-                execution_results.append({
-                    "task": task_payload_item.task, 
-                    "status": "success", 
-                    "response": response
-                })
-            except Exception as e:
-                log.error(f"Execution failed for task {task_payload_item.task}: {str(e)}")
-                execution_results.append({
-                    "task": task_payload_item.task, 
-                    "status": "failed", 
-                    "error": str(e)
-                })
-                # Removed duplicate invoke_execute_handler call
-
         # Return the final response
         log.debug("Returning compilation summary", details=compilation_summary)
 
@@ -142,12 +122,9 @@ def handler(event: dict, context: Any | None) -> dict:
             TR_RESPONSE: {
                 TP_DEPLOYMENT_DETAILS: deployment_details.model_dump(),
                 "compilation_summary": compilation_summary,
-                "execution_results": execution_results,  # Added execution results to response
                 "task_payload": {
-                    "deployment_id": task_payload.deployment_details.deployment_id,
-                    "organization": task_payload.deployment_details.organization,
+                    "tasks": [tp.task for tp in task_payloads],
                     "environment": task_payload.deployment_details.environment,
-                    "tasks": [tp.task for tp in task_payloads],  # Fixed: lowercase 'tasks'
                 },
                 "status": "COMPILE_COMPLETE",
                 "message": f"Successfully compiled {len(compilation_summary['specs_compiled'])} deployspec(s)",
@@ -164,9 +141,6 @@ def handler(event: dict, context: Any | None) -> dict:
 
         # Add context if available
         try:
-            if "task_payload" in locals():
-                error_details["deployment_id"] = task_payload.deployment_details.deployment_id
-                error_details["organization"] = task_payload.deployment_details.organization
             if "compilation_summary" in locals():
                 error_details["specs_compiled_before_failure"] = compilation_summary["specs_compiled"]
         except Exception as context_error:  # Fixed: catch specific exception instead of bare except
