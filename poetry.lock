@@ -2075,50 +2075,32 @@ reference = "nexus"
 
 [[package]]
 name = "sck-core-db"
-version = "0.0.7-pre.2+b5bdbe9"
+version = "0.0.7"
 description = "Core Database Library to access DynamoDB for Core-Automation"
 optional = false
-python-versions = "^3.12"
+python-versions = ">=3.12,<4.0"
 groups = ["main"]
-files = []
-develop = true
+files = [
+    {file = "sck_core_db-0.0.7-py3-none-any.whl", hash = "sha256:c7157df391cb560d96ca582fa0090a393981e5a3280e9eaa26bc6f01b4920683"},
+    {file = "sck_core_db-0.0.7.tar.gz", hash = "sha256:360b2bfa76051b5b2a50201b71c56b5c8e03b42a2a624a8ae11ccc20579eb606"},
+]
 
 [package.dependencies]
-boto3 = ">=1.35.93"
-botocore = ">=1.35.93"
-pydantic = "^2.10.3"
-pynamodb = "^6.0.1"
-sck-core-framework = {path = "../sck-core-framework", develop = true}
+boto3 = ">=1.39.9"
+botocore = ">=1.39.9"
+pydantic = ">=2.10.3,<3.0.0"
+pynamodb = ">=6.0.1,<7.0.0"
+sck-core-framework = ">=0.0.7,<0.0.8"
 
 [package.source]
-type = "directory"
-url = "../sck-core-db"
+type = "legacy"
+url = "https://monster-jj.jvj28.com:9091/repository/pypi/simple"
+reference = "nexus"
 
 [[package]]
 name = "sck-core-execute"
-version = "0.0.7-pre.7+271b4d5"
+version = "0.0.7"
 description = "Core Automation Engine execute Lambda function"
-optional = false
-python-versions = "^3.12"
-groups = ["main"]
-files = []
-develop = true
-
-[package.dependencies]
-boto3 = ">=1.35.93"
-botocore = ">=1.35.93"
-inflect = "^7.5.0"
-sck-core-db = {path = "../sck-core-db", develop = true}
-sck-core-framework = {path = "../sck-core-framework", develop = true}
-
-[package.source]
-type = "directory"
-url = "../sck-core-execute"
-
-[[package]]
-name = "sck-core-framework"
-version = "0.0.7-pre.13+3cd61b8"
-description = "Core-Framework for Core-Automation"
 optional = false
 python-versions = "^3.12"
 groups = ["main"]
@@ -2128,17 +2110,41 @@ develop = true
 [package.dependencies]
 boto3 = ">=1.39.9"
 botocore = ">=1.39.9"
-deepdiff = "^7.0.1"
-filters = "^1.3.2"
-jinja2 = "^3.1.4"
-jmespath = "^1.0.1"
-netaddr = "^1.3.0"
-python-slugify = "^8.0.4"
-ruamel-yaml = "^0.18.10"
+inflect = "^7.5.0"
+sck-core-db = "^0.0.7"
+sck-core-framework = "^0.0.7"
 
 [package.source]
 type = "directory"
-url = "../sck-core-framework"
+url = "../sck-core-execute"
+
+[[package]]
+name = "sck-core-framework"
+version = "0.0.7"
+description = "Core-Framework for Core-Automation"
+optional = false
+python-versions = ">=3.12,<4.0"
+groups = ["main"]
+files = [
+    {file = "sck_core_framework-0.0.7-py3-none-any.whl", hash = "sha256:2a9e3b38196ef1c34bb8fa665335dba1b78c71ec92120c253fc748cbbfc77071"},
+    {file = "sck_core_framework-0.0.7.tar.gz", hash = "sha256:33f2797e22aa7dd1e59a3f243b427b3f209d13762bb0f26b5f70ffe2924ef670"},
+]
+
+[package.dependencies]
+boto3 = ">=1.39.9"
+botocore = ">=1.39.9"
+deepdiff = ">=7.0.1,<8.0.0"
+filters = ">=1.3.2,<2.0.0"
+jinja2 = ">=3.1.4,<4.0.0"
+jmespath = ">=1.0.1,<2.0.0"
+netaddr = ">=1.3.0,<2.0.0"
+python-slugify = ">=8.0.4,<9.0.0"
+ruamel-yaml = ">=0.18.10,<0.19.0"
+
+[package.source]
+type = "legacy"
+url = "https://monster-jj.jvj28.com:9091/repository/pypi/simple"
+reference = "nexus"
 
 [[package]]
 name = "six"
@@ -2314,4 +2320,4 @@ reference = "nexus"
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "87894af7fdd944321ba4f10bb07b54b20d9d3f3bc07721a79bcb90e3187e12e9"
+content-hash = "dd3c1251182524d7e7a12606f898bcd95487fa40528e842304cb3eeab3acd8d8"
