@@ -74,10 +74,19 @@ class TestCompilerFunctions:
         [
             ("{{ core.Portfolio }}-resources", SCOPE_PORTFOLIO),
             ("{{ core.Project }}-{{ core.App }}-resources", SCOPE_APP),
-            ("{{ core.Project }}-{{ core.App }}-{{ core.Branch }}-resources", SCOPE_BRANCH),
-            ("{{ core.Project }}-{{ core.App }}-{{ core.Branch }}-{{ core.Build}}-resources", SCOPE_BUILD),
+            (
+                "{{ core.Project }}-{{ core.App }}-{{ core.Branch }}-resources",
+                SCOPE_BRANCH,
+            ),
+            (
+                "{{ core.Project }}-{{ core.App }}-{{ core.Branch }}-{{ core.Build}}-resources",
+                SCOPE_BUILD,
+            ),
             ("simple-stack-name", None),  # Test non-templated name
-            ("{{ core.Portfolio }}-{{ core.App }}-{{ core.Branch }}-{{ core.Build}}-resources", SCOPE_BUILD),  # All variables
+            (
+                "{{ core.Portfolio }}-{{ core.App }}-{{ core.Branch }}-{{ core.Build}}-resources",
+                SCOPE_BUILD,
+            ),  # All variables
         ],
     )
     def test_get_stack_scope_various_patterns(self, stack_name, expected_scope):
@@ -118,7 +127,9 @@ class TestCompilerFunctions:
             ActionSpec(**invalid_spec)
 
     # Helper methods (not fixtures, just utility functions)
-    def _get_action_parameters(self, name: str, account: list[str], region: list[str]) -> dict:
+    def _get_action_parameters(
+        self, name: str, account: list[str], region: list[str]
+    ) -> dict:
         """Helper to create action parameters."""
         return {
             "stack_name": name,
@@ -128,7 +139,9 @@ class TestCompilerFunctions:
             "stack_policy": "stack_policy",
         }
 
-    def _get_user_action_parameters(self, name: str, user: str, account: str, region: str) -> dict:
+    def _get_user_action_parameters(
+        self, name: str, user: str, account: str, region: str
+    ) -> dict:
         """Helper to create user action parameters."""
         return {
             "stack_name": name,
@@ -148,7 +161,9 @@ class TestCompilerFunctions:
             "scope": "build",
         }
 
-    def _get_deployspec(self, name: str, account: list[str], region: list[str]) -> list[dict]:
+    def _get_deployspec(
+        self, name: str, account: list[str], region: list[str]
+    ) -> list[dict]:
         """Helper to create deployspec list."""
         return [self._get_action(name, account, region)]
 
@@ -161,7 +176,9 @@ class TestCompilerFunctions:
             "params": self._get_user_action_parameters(name, user, account, region),
         }
 
-    def _get_user_deployspec(self, name: str, user: str, account: str, region: str) -> list[dict]:
+    def _get_user_deployspec(
+        self, name: str, user: str, account: str, region: str
+    ) -> list[dict]:
         """Helper to create user deployspec list."""
         return [self._get_user_action(name, user, account, region)]
 

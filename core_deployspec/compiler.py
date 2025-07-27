@@ -20,9 +20,13 @@ from core_execute.actionlib.actions.aws.create_stack import CreateStackActionSpe
 from core_execute.actionlib.actions.aws.delete_stack import DeleteStackActionSpec
 from core_execute.actionlib.actions.aws.delete_user import DeleteUserActionSpec
 from core_execute.actionlib.actions.aws.put_user import PutUserActionSpec
-from core_execute.actionlib.actions.aws.delete_change_set import DeleteChangeSetActionSpec
+from core_execute.actionlib.actions.aws.delete_change_set import (
+    DeleteChangeSetActionSpec,
+)
 from core_execute.actionlib.actions.aws.apply_change_set import ApplyChangeSetActionSpec
-from core_execute.actionlib.actions.aws.create_change_set import CreateChangeSetActionSpec
+from core_execute.actionlib.actions.aws.create_change_set import (
+    CreateChangeSetActionSpec,
+)
 
 from jinja2 import Template
 
@@ -96,7 +100,7 @@ def load_deployspec(task_payload: TaskPayload) -> dict[str, DeploySpec]:
     >>> task_payload = TaskPayload(
     ...     package=PackageDetails(
     ...         bucket_name="my-bucket",
-    ...         bucket_region="us-east-1", 
+    ...         bucket_region="us-east-1",
     ...         key="deployments/package.zip"
     ...     )
     ... )
@@ -113,7 +117,9 @@ def load_deployspec(task_payload: TaskPayload) -> dict[str, DeploySpec]:
         raise ValueError("Package key is required")
 
     # Download file from S3
-    log.info("Downloading package from storage ({}) ({})".format(bucket_name, package_key))
+    log.info(
+        "Downloading package from storage ({}) ({})".format(bucket_name, package_key)
+    )
 
     # Get the storage location
     bucket = MagicS3Client.get_bucket(Region=region, BucketName=bucket_name)
@@ -131,7 +137,9 @@ def load_deployspec(task_payload: TaskPayload) -> dict[str, DeploySpec]:
     return spec
 
 
-def process_package_zip(task_payload: TaskPayload, zip_fileobj: io.BytesIO) -> dict[str, DeploySpec]:
+def process_package_zip(
+    task_payload: TaskPayload, zip_fileobj: io.BytesIO
+) -> dict[str, DeploySpec]:
     """
     Process the zip package copying content to the artifacts store while extracting the actions
     into a DeploySpec object. (plan, apply, deploy, or teardown)
@@ -166,7 +174,9 @@ def process_package_zip(task_payload: TaskPayload, zip_fileobj: io.BytesIO) -> d
 
     zipfile_obj = zip.ZipFile(zip_fileobj, "r")
 
-    log.debug("Extracting {} and Uploading artifact to: {}", V_PACKAGE_ZIP, upload_prefix)
+    log.debug(
+        "Extracting {} and Uploading artifact to: {}", V_PACKAGE_ZIP, upload_prefix
+    )
 
     bucket = MagicS3Client.get_bucket(Region=bucket_region, BucketName=bucket_name)
 
@@ -205,7 +215,9 @@ def process_package_zip(task_payload: TaskPayload, zip_fileobj: io.BytesIO) -> d
 
     # Process deployspec
     if not specs:
-        raise Exception("Package does not contain any deployspec files, cannot continue")
+        raise Exception(
+            "Package does not contain any deployspec files, cannot continue"
+        )
 
     return specs
 
@@ -232,13 +244,21 @@ def get_accounts_regions(action_spec: ActionSpec) -> tuple[list[str], list[str]]
     >>> accounts, regions = get_accounts_regions(action_spec)
     >>> # Returns: (["123456789012"], ["us-east-1"])
     """
-    accounts = action_spec.params.get("accounts") or action_spec.params.get("Accounts") or []
+    accounts = (
+        action_spec.params.get("accounts") or action_spec.params.get("Accounts") or []
+    )
     account = action_spec.params.get("account") or action_spec.params.get("Account")
     if account and account not in accounts:
         accounts.append(account)
 
-    regions = action_spec.params.get("regions") or action_spec.params.get("Regions") or []
-    region = action_spec.params.get("region") or action_spec.params.get("Region") or util.get_region()
+    regions = (
+        action_spec.params.get("regions") or action_spec.params.get("Regions") or []
+    )
+    region = (
+        action_spec.params.get("region")
+        or action_spec.params.get("Region")
+        or util.get_region()
+    )
     if region and region not in regions:
         regions.append(region)
 
@@ -262,17 +282,23 @@ def get_region_account_labels(action_spec: ActionSpec) -> list[str]:
     ...     params={"accounts": ["123", "456"], "regions": ["us-east-1", "us-west-2"]}
     ... )
     >>> labels = get_region_account_labels(action_spec)
-    >>> # Returns: ["create-vpc-123-us-east-1", "create-vpc-123-us-west-2", 
+    >>> # Returns: ["create-vpc-123-us-east-1", "create-vpc-123-us-west-2",
     >>> #           "create-vpc-456-us-east-1", "create-vpc-456-us-west-2"]
     """
     accounts, regions = get_accounts_regions(action_spec)
 
-    labels = [f"{action_spec.label}-{account}-{region}" for account in accounts for region in regions]
+    labels = [
+        f"{action_spec.label}-{account}-{region}"
+        for account in accounts
+        for region in regions
+    ]
 
     return labels
 
 
-def compile_deployspec(task_payload: TaskPayload, deployspec: DeploySpec) -> list[ActionSpec]:
+def compile_deployspec(
+    task_payload: TaskPayload, deployspec: DeploySpec
+) -> list[ActionSpec]:
     """
     Convert deployspec into an actions list.
 
@@ -304,9 +330,18 @@ def compile_deployspec(task_payload: TaskPayload, deployspec: DeploySpec) -> lis
         "delete_stack": {"allow_multiple_stacks": True, "kind": DeleteStackActionSpec},
         "create_user": {"allow_multiple_stacks": False, "kind": PutUserActionSpec},
         "delete_user": {"allow_multiple_stacks": False, "kind": DeleteUserActionSpec},
-        "create_change_set": {"allow_multiple_stacks": False, "kind": CreateChangeSetActionSpec},
-        "apply_change_set": {"allow_multiple_stacks": False, "kind": ApplyChangeSetActionSpec},
-        "delete_change_set": {"allow_multiple_stacks": False, "kind": DeleteChangeSetActionSpec},
+        "create_change_set": {
+            "allow_multiple_stacks": False,
+            "kind": CreateChangeSetActionSpec,
+        },
+        "apply_change_set": {
+            "allow_multiple_stacks": False,
+            "kind": ApplyChangeSetActionSpec,
+        },
+        "delete_change_set": {
+            "allow_multiple_stacks": False,
+            "kind": DeleteChangeSetActionSpec,
+        },
     }
 
     # For the actions specified in the deployspec, compile them into a list of actions for the core_execute module
@@ -315,12 +350,17 @@ def compile_deployspec(task_payload: TaskPayload, deployspec: DeploySpec) -> lis
         params = routes.get(action_spec.type, None)
         if not params:
             raise ValueError(f"Unknown action type {action_spec.type}")
-        compiled_actions.extend(compile_action(action_spec, task_payload, spec_label_map, **params))
+        compiled_actions.extend(
+            compile_action(action_spec, task_payload, spec_label_map, **params)
+        )
     return compiled_actions
 
 
 def compile_action(
-    action_spec: ActionSpec, task_payload: TaskPayload, spec_label_map: SpecLabelMapType, **kwargs
+    action_spec: ActionSpec,
+    task_payload: TaskPayload,
+    spec_label_map: SpecLabelMapType,
+    **kwargs,
 ) -> list[ActionSpec]:
     """
     Compile a single action specification into executable actions.
@@ -340,7 +380,7 @@ def compile_action(
     Examples
     --------
     >>> action_spec = ActionSpec(type="create_stack", label="vpc", params={...})
-    >>> actions = compile_action(action_spec, task_payload, spec_label_map, 
+    >>> actions = compile_action(action_spec, task_payload, spec_label_map,
     ...                         allow_multiple_stacks=True, kind=CreateStackActionSpec)
     >>> # Returns: [ActionSpec(...)]
     """
@@ -354,12 +394,18 @@ def compile_action(
             raise ValueError("Missing account or region")
 
         if len(accounts) > 1 or len(regions) > 1:
-            raise ValueError(f"Cannot {action_spec.type} from multiple accounts or regions")
+            raise ValueError(
+                f"Cannot {action_spec.type} from multiple accounts or regions"
+            )
 
     action_list: list[ActionSpec] = []
     for account in accounts:
         for region in regions:
-            action_list.append(generate_action_command(task_payload, action_spec, spec_label_map, account, region))
+            action_list.append(
+                generate_action_command(
+                    task_payload, action_spec, spec_label_map, account, region
+                )
+            )
     return action_list
 
 
@@ -390,7 +436,7 @@ def generate_action_command(
     Examples
     --------
     >>> action_spec = ActionSpec(action="AWS::CreateStack", label="vpc", params={...})
-    >>> command = generate_action_command(task_payload, action_spec, spec_label_map, 
+    >>> command = generate_action_command(task_payload, action_spec, spec_label_map,
     ...                                  "123456789012", "us-east-1")
     >>> # Returns: ActionSpec with executable parameters
     """
@@ -420,25 +466,35 @@ def generate_action_command(
     }
 
     # Perform the following actions if the action_spec is PutUser
-    user_name = action_spec.params.get("user_name") or action_spec.params.get("UserName")
+    user_name = action_spec.params.get("user_name") or action_spec.params.get(
+        "UserName"
+    )
     if user_name:
         execute_action["Params"]["UserName"] = user_name
 
     # Perform the following actions if the action_spec is a CloudFormation action
     if action_spec.action == "AWS::CreateStack":
-        stack_name = action_spec.params.get("stack_name") or action_spec.params.get("StackName")
+        stack_name = action_spec.params.get("stack_name") or action_spec.params.get(
+            "StackName"
+        )
         if stack_name:
             execute_action["Params"]["StackName"] = stack_name
         stack_parameters = __apply_syntax_update(action_spec.params.parameters)
         if stack_parameters:
             execute_action["Params"]["StackParameters"] = stack_parameters
-        stack_policy = action_spec.params.get("stack_policy") or action_spec.params.get("StackPolicy")
+        stack_policy = action_spec.params.get("stack_policy") or action_spec.params.get(
+            "StackPolicy"
+        )
         if stack_policy:
             # If the stack policy is a string, we will assume it's a JSON string.
             # If it's a dict, we will convert it to a JSON string.
             # If it's None, we will not include it in the action.
-            execute_action["Params"]["StackPolicy"] = __get_stack_policy_json(stack_policy)
-        template_url = get_action_template_url(action_spec, bucket_name, bucket_region, deployment_details)
+            execute_action["Params"]["StackPolicy"] = __get_stack_policy_json(
+                stack_policy
+            )
+        template_url = get_action_template_url(
+            action_spec, bucket_name, bucket_region, deployment_details
+        )
         if template_url:
             execute_action["Params"]["TemplateUrl"] = template_url
         tags = __get_tags(scope, deployment_details)
@@ -475,7 +531,9 @@ def get_action_template_url(
     >>> # Returns: "s3://my-bucket/artifacts/vpc.yaml"
     """
 
-    key = action_spec.params.get("template_url") or action_spec.params.get("TemplateUrl")
+    key = action_spec.params.get("template_url") or action_spec.params.get(
+        "TemplateUrl"
+    )
     if key is None:
         return None
     scope = __get_action_scope(action_spec, deployment_details)
@@ -495,7 +553,7 @@ def get_template_url(
 
     :param bucket_name: The S3 bucket name where templates are stored
     :type bucket_name: str
-    :param bucket_region: The AWS region of the S3 bucket  
+    :param bucket_region: The AWS region of the S3 bucket
     :type bucket_region: str
     :param dd: The deployment details for path generation
     :type dd: DeploymentDetails
@@ -508,7 +566,7 @@ def get_template_url(
 
     Examples
     --------
-    >>> url = get_template_url("my-bucket", "us-east-1", deployment_details, 
+    >>> url = get_template_url("my-bucket", "us-east-1", deployment_details,
     ...                       "vpc.yaml", "build")
     >>> # Returns: "s3://my-bucket/artifacts/client/portfolio/app/branch/build/vpc.yaml"
     """
@@ -665,7 +723,7 @@ def __get_tags(scope: str | None, deployment_details: DeploymentDetails) -> dict
 def __apply_syntax_update(stack_parameters: dict | None) -> dict | None:
     """
     Deal with runner syntax changes for backward compatibility.
-    
+
     Converts old syntax: ``S3ComplianceBucketName: "{{ foo.bar }}"``
     To new syntax: ``S3ComplianceBucketName: "{{ 'foo/bar' | lookup }}"``
 
@@ -689,7 +747,9 @@ def __apply_syntax_update(stack_parameters: dict | None) -> dict | None:
         stack_parameters[key] = re.sub(
             r"{{ (?!core.)([^.]*)\.(.*) }}",
             r"{{ '\1/\2' | lookup }}",
-            "{}".format(stack_parameters[key]),  # Must be a string for re.sub to work, so fails when your parameter is a number.
+            "{}".format(
+                stack_parameters[key]
+            ),  # Must be a string for re.sub to work, so fails when your parameter is a number.
         )
     return stack_parameters
 
@@ -715,16 +775,22 @@ def __get_depends_on(action: ActionSpec, spec_label_map: SpecLabelMapType) -> li
     if not action.depends_on:
         return []
 
-    depends_on: list = [item for sublist in map(lambda label: spec_label_map[label], action.depends_on) for item in sublist]
+    depends_on: list = [
+        item
+        for sublist in map(lambda label: spec_label_map[label], action.depends_on)
+        for item in sublist
+    ]
 
     return depends_on
 
 
-def __get_action_scope(action: ActionSpec, deployment_details: DeploymentDetails) -> str:
+def __get_action_scope(
+    action: ActionSpec, deployment_details: DeploymentDetails
+) -> str:
     """
     Determine the deployment scope for an action based on stack name templates.
 
-    Relies on the deployspec to have templating to determine the scope or you can specify 
+    Relies on the deployspec to have templating to determine the scope or you can specify
     the scope in the action object.
 
     Example stack_name: ``"{{ core.Project }}-{{ core.App }}-resources"``

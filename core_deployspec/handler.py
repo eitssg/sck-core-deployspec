@@ -88,7 +88,9 @@ def handler(event: dict, context: Any | None) -> dict:
             # Create a new task-specific payload by copying the original
             task_specific_payload = TaskPayload(**task_payload.model_dump())
             task_specific_payload.task = task
-            task_payloads.append(task_specific_payload)  # Fixed: append the task_specific_payload
+            task_payloads.append(
+                task_specific_payload
+            )  # Fixed: append the task_specific_payload
 
             log.debug(f"Processing task: {task}", details=spec.model_dump())
 
@@ -142,8 +144,12 @@ def handler(event: dict, context: Any | None) -> dict:
         # Add context if available
         try:
             if "compilation_summary" in locals():
-                error_details["specs_compiled_before_failure"] = compilation_summary["specs_compiled"]
-        except Exception as context_error:  # Fixed: catch specific exception instead of bare except
+                error_details["specs_compiled_before_failure"] = compilation_summary[
+                    "specs_compiled"
+                ]
+        except (
+            Exception
+        ) as context_error:  # Fixed: catch specific exception instead of bare except
             log.warning(f"Failed to add error context: {str(context_error)}")
 
         log.status(

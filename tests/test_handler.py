@@ -82,7 +82,9 @@ def package_package():
                 if file_path.exists():
                     zipf.write(file_path, file_name)
                 else:
-                    pytest.skip(f"Required test file {file_name} not found in {dirname}")
+                    pytest.skip(
+                        f"Required test file {file_name} not found in {dirname}"
+                    )
 
         yield str(package_path)
 
@@ -114,7 +116,9 @@ def upload_package(task_payload: TaskPayload, package_package: str):
     # This is the "upload" step
 
     package_details = task_payload.package
-    bucket = MagicS3Client(Region=package_details.bucket_region).Bucket(package_details.bucket_name)
+    bucket = MagicS3Client(Region=package_details.bucket_region).Bucket(
+        package_details.bucket_name
+    )
 
     try:
         # Upload package.zip (should be small - a few MB is ok, but 100MB is not)
@@ -131,7 +135,9 @@ def upload_package(task_payload: TaskPayload, package_package: str):
         try:
             bucket.delete_object(Key=package_details.key)
         except Exception as cleanup_error:
-            print(f"Warning: Failed to cleanup S3 object {package_details.key}: {cleanup_error}")
+            print(
+                f"Warning: Failed to cleanup S3 object {package_details.key}: {cleanup_error}"
+            )
 
 
 @pytest.fixture(scope="module")
@@ -182,25 +188,37 @@ class TestDeployspecHandler:
             response = result["Response"]
 
             # Test compilation summary
-            assert "compilation_summary" in response, "Response should contain compilation summary"
+            assert (
+                "compilation_summary" in response
+            ), "Response should contain compilation summary"
             compilation_summary = response["compilation_summary"]
 
             assert "specs_compiled" in compilation_summary
             assert "total_actions_generated" in compilation_summary
-            assert len(compilation_summary["specs_compiled"]) > 0, "Should have compiled at least one spec"
+            assert (
+                len(compilation_summary["specs_compiled"]) > 0
+            ), "Should have compiled at least one spec"
 
             # Test execution results
-            assert "execution_results" in response, "Response should contain execution results"
+            assert (
+                "execution_results" in response
+            ), "Response should contain execution results"
             execution_results = response["execution_results"]
 
-            assert isinstance(execution_results, list), "Execution results should be a list"
+            assert isinstance(
+                execution_results, list
+            ), "Execution results should be a list"
             assert len(execution_results) > 0, "Should have execution results"
 
             # Test task payload creation
-            assert "task_payloads_created" in response, "Response should contain created task payloads"
+            assert (
+                "task_payloads_created" in response
+            ), "Response should contain created task payloads"
             task_payloads_created = response["task_payloads_created"]
 
-            assert isinstance(task_payloads_created, list), "Task payloads should be a list"
+            assert isinstance(
+                task_payloads_created, list
+            ), "Task payloads should be a list"
             assert len(task_payloads_created) > 0, "Should have created task payloads"
 
             # Verify task types
@@ -208,14 +226,21 @@ class TestDeployspecHandler:
             created_tasks = [tp["task"] for tp in task_payloads_created]
 
             for task in created_tasks:
-                assert task in expected_tasks, f"Task '{task}' should be one of {expected_tasks}"
+                assert (
+                    task in expected_tasks
+                ), f"Task '{task}' should be one of {expected_tasks}"
 
             # Test status
             assert "status" in response, "Response should contain status"
             status = response["status"]
-            assert status in ["EXECUTION_COMPLETE", "EXECUTION_FAILED"], f"Status should be valid, got: {status}"
+            assert status in [
+                "EXECUTION_COMPLETE",
+                "EXECUTION_FAILED",
+            ], f"Status should be valid, got: {status}"
 
-            print(f"✅ Handler test passed - Compiled {len(compilation_summary['specs_compiled'])} specs")
+            print(
+                f"✅ Handler test passed - Compiled {len(compilation_summary['specs_compiled'])} specs"
+            )
 
         except ValidationError as e:
             print(f"Validation errors: {e.errors()}")
@@ -248,10 +273,14 @@ class TestDeployspecHandler:
             specs_compiled = compilation_summary["specs_compiled"]
 
             # All found specs should be compiled (assuming no errors)
-            assert len(specs_compiled) <= len(specs_found), "Compiled specs should not exceed found specs"
+            assert len(specs_compiled) <= len(
+                specs_found
+            ), "Compiled specs should not exceed found specs"
 
             # Should have some actions generated
-            assert compilation_summary["total_actions_generated"] > 0, "Should generate some actions"
+            assert (
+                compilation_summary["total_actions_generated"] > 0
+            ), "Should generate some actions"
 
         except Exception as e:
             pytest.fail(f"Compilation test failed: {e}")
@@ -265,7 +294,9 @@ class TestDeployspecHandler:
             deployspec_handler(invalid_payload, None)
 
     @pytest.mark.parametrize("missing_field", ["deployment_details", "Package"])
-    def test_deployspec_handler_missing_required_fields(self, task_payload: TaskPayload, missing_field):
+    def test_deployspec_handler_missing_required_fields(
+        self, task_payload: TaskPayload, missing_field
+    ):
         """Test handler behavior with missing required fields."""
         payload_dict = task_payload.model_dump()
 
@@ -287,4 +318,6 @@ def test_deployspec_compiler(
     """Legacy test function - use TestDeployspecHandler class instead."""
     # Call the new test class method
     test_instance = TestDeployspecHandler()
-    test_instance.test_deployspec_handler_compilation_and_execution(task_payload, upload_package, facts, arguments)
+    test_instance.test_deployspec_handler_compilation_and_execution(
+        task_payload, upload_package, facts, arguments
+    )

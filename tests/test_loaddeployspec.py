@@ -23,7 +23,9 @@ class TestLoadDeployspec:
         deployspec = compiler.load_deployspec(current_folder)
 
         assert deployspec is not None, "Should load deployspec successfully"
-        assert len(deployspec) == 6, "There should be 6 actions in the sample deployspec.yaml"
+        assert (
+            len(deployspec) == 6
+        ), "There should be 6 actions in the sample deployspec.yaml"
 
         # Test DeploySpec creation
         ds = DeploySpec(actions=deployspec)
@@ -32,8 +34,12 @@ class TestLoadDeployspec:
 
         # Test first action spec
         action_spec = ds.action_specs[0]
-        assert isinstance(action_spec, ActionSpec), "ActionSpec should be an instance of ActionSpec"
-        assert isinstance(action_spec.params, dict), "ActionSpec params should be a dict"
+        assert isinstance(
+            action_spec, ActionSpec
+        ), "ActionSpec should be an instance of ActionSpec"
+        assert isinstance(
+            action_spec.params, dict
+        ), "ActionSpec params should be a dict"
 
     def test_load_deployspec_json_format(self, test_data_dir):
         """Test loading deployspec from JSON format."""
@@ -49,8 +55,12 @@ class TestLoadDeployspec:
 
         # Test first action spec
         action_spec = ds.action_specs[0]
-        assert isinstance(action_spec, ActionSpec), "ActionSpec should be an instance of ActionSpec"
-        assert isinstance(action_spec.params, dict), "ActionSpec params should be a dict"
+        assert isinstance(
+            action_spec, ActionSpec
+        ), "ActionSpec should be an instance of ActionSpec"
+        assert isinstance(
+            action_spec.params, dict
+        ), "ActionSpec params should be a dict"
 
     def test_load_deployspec_struct_format(self, test_data_dir):
         """Test loading deployspec from struct format."""
@@ -63,15 +73,22 @@ class TestLoadDeployspec:
         ds = DeploySpec(actions=deployspec)
         assert isinstance(ds, DeploySpec), "Should return a DeploySpec instance"
         assert isinstance(ds.action_specs, list), "DeploySpec actions should be a list"
-        assert len(ds.action_specs) == 1, "There should be 1 action in the deployspec_struct/deployspec.yaml"
-        assert isinstance(ds.action_specs[0], ActionSpec), "ActionSpec should be an instance of ActionSpec"
+        assert (
+            len(ds.action_specs) == 1
+        ), "There should be 1 action in the deployspec_struct/deployspec.yaml"
+        assert isinstance(
+            ds.action_specs[0], ActionSpec
+        ), "ActionSpec should be an instance of ActionSpec"
 
     def test_load_deployspec_json_error_handling(self, test_data_dir):
         """Test error handling when JSON loading fails."""
         current_folder = os.path.join(test_data_dir, "deployspec_json")
 
         # Patch the json.load function to throw an exception
-        with patch("core_framework.common.json.load", side_effect=ValueError("Error loading deployspec")):
+        with patch(
+            "core_framework.common.json.load",
+            side_effect=ValueError("Error loading deployspec"),
+        ):
             data = compiler.load_deployspec(current_folder)
             assert data is None, "Should return None if deployspec cannot be loaded"
 
@@ -80,7 +97,9 @@ class TestLoadDeployspec:
         # Create a temporary empty directory
         with tempfile.TemporaryDirectory() as temp_dir:
             deployspec = util.load_deployspec(temp_dir)
-            assert deployspec is None, "Should return None if no deployspec is found in the directory"
+            assert (
+                deployspec is None
+            ), "Should return None if no deployspec is found in the directory"
 
     def test_load_deployspec_current_directory_no_file(self, test_data_dir):
         """Test loading from current directory when no deployspec exists."""
@@ -91,7 +110,9 @@ class TestLoadDeployspec:
         os.makedirs(none_folder, exist_ok=True)
 
         deployspec = util.load_deployspec(none_folder)
-        assert deployspec is None, "Should return None if no deployspec is found in the directory"
+        assert (
+            deployspec is None
+        ), "Should return None if no deployspec is found in the directory"
 
     def test_load_deployspec_invalid_directory(self):
         """Test behavior with invalid directory path."""
@@ -111,8 +132,12 @@ class TestLoadDeployspec:
 
             # Load without specifying path (should use current directory)
             deployspec = compiler.load_deployspec()
-            assert deployspec is not None, "Should load deployspec from current directory"
-            assert len(deployspec) == 6, "Should load the correct deployspec from current directory"
+            assert (
+                deployspec is not None
+            ), "Should load deployspec from current directory"
+            assert (
+                len(deployspec) == 6
+            ), "Should load the correct deployspec from current directory"
 
         finally:
             # Always restore original directory
@@ -126,7 +151,9 @@ class TestLoadDeployspec:
             ("deployspec_json", None),  # Adjust based on actual content
         ],
     )
-    def test_load_deployspec_various_formats(self, test_data_dir, folder_name, expected_actions):
+    def test_load_deployspec_various_formats(
+        self, test_data_dir, folder_name, expected_actions
+    ):
         """Parameterized test for different deployspec formats."""
         current_folder = os.path.join(test_data_dir, folder_name)
 
@@ -140,7 +167,9 @@ class TestLoadDeployspec:
             assert deployspec is not None, f"Should load deployspec from {folder_name}"
         else:
             assert deployspec is not None, f"Should load deployspec from {folder_name}"
-            assert len(deployspec) == expected_actions, f"Should have {expected_actions} actions in {folder_name}"
+            assert (
+                len(deployspec) == expected_actions
+            ), f"Should have {expected_actions} actions in {folder_name}"
 
 
 # Additional integration test
@@ -159,6 +188,8 @@ def test_deployspec_end_to_end_workflow():
 
     # Validate all action specs
     for i, action_spec in enumerate(deploy_spec.action_specs):
-        assert isinstance(action_spec, ActionSpec), f"Action {i} should be ActionSpec instance"
+        assert isinstance(
+            action_spec, ActionSpec
+        ), f"Action {i} should be ActionSpec instance"
         assert hasattr(action_spec, "params"), f"Action {i} should have params"
         assert isinstance(action_spec.params, dict), f"Action {i} params should be dict"
