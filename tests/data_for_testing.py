@@ -361,7 +361,6 @@ def get_app_data(
     # The client/portfolio is where this BizApp that this Deployment is for.
     # The Zone is where this BizApp component will be deployed.
 
-    # Fixed: Use lowercase attribute access
     client = portfolio_data.Client
     portfolio = portfolio_data.Portfolio
     app = arguments["app"]

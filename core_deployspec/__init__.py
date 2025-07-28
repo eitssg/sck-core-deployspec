@@ -1,5 +1,5 @@
 from .handler import handler as compiler
 
-__version__ = "0.0.5"
+__version__ = "0.0.8"
 
 __all__ = ["compiler"]
