@@ -16,7 +16,6 @@ from core_framework.constants import (
     TR_RESPONSE,
 )
 from core_framework.status import COMPILE_FAILED, COMPILE_COMPLETE, COMPILE_IN_PROGRESS
-from core_execute.handler import invoke_execute_handler
 
 from .compiler import (
     apply_context,

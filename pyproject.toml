@@ -4,7 +4,7 @@ build-backend = "poetry_dynamic_versioning.backend"
 
 [tool.poetry]
 name = "sck-core-deployspec"
-version = "0.0.9"
+version = "0.0.10"
 description = "Core Automation Deployspec Actions Compiler lambda function"
 authors = [ "James Barwick <jbarwick@me.com>",]
 license = "GPL-3.0-only"
@@ -24,9 +24,18 @@ style = "semver"
 python = "^3.12"
 boto3 = ">=1.39.9"
 botocore = ">=1.39.9"
-sck-core-framework = "^0.0.9"
-sck-core-db = "^0.0.9"
 
+[tool.poetry.dependencies.sck-core-execute]
+path = "../sck-core-execute"
+develop = true
+
+[tool.poetry.dependencies.sck-core-db]
+path = "../sck-core-db"
+develop = true
+
+[tool.poetry.dependencies.sck-core-framework]
+path = "../sck-core-framework"
+develop = true
 [[tool.poetry.source]]
 name = "nexus"
 url = "https://monster-jj.jvj28.com:9091/repository/pypi/simple/"

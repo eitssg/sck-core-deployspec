@@ -120,18 +120,18 @@ reference = "nexus"
 
 [[package]]
 name = "boto3"
-version = "1.39.14"
+version = "1.39.15"
 description = "The AWS SDK for Python"
 optional = false
 python-versions = ">= 3.9"
 groups = ["main", "dev"]
 files = [
-    {file = "boto3-1.39.14-py3-none-any.whl", hash = "sha256:82c6868cad18c3bd4170915e9525f9af5f83e9779c528417f8863629558fc2d0"},
-    {file = "boto3-1.39.14.tar.gz", hash = "sha256:fabb16360a93b449d5241006485bcc761c26694e75ac01009f4459f114acc06e"},
+    {file = "boto3-1.39.15-py3-none-any.whl", hash = "sha256:38fc54576b925af0075636752de9974e172c8a2cf7133400e3e09b150d20fb6a"},
+    {file = "boto3-1.39.15.tar.gz", hash = "sha256:b4483625f0d8c35045254dee46cd3c851bbc0450814f20b9b25bee1b5c0d8409"},
 ]
 
 [package.dependencies]
-botocore = ">=1.39.14,<1.40.0"
+botocore = ">=1.39.15,<1.40.0"
 jmespath = ">=0.7.1,<2.0.0"
 s3transfer = ">=0.13.0,<0.14.0"
 
@@ -145,14 +145,14 @@ reference = "nexus"
 
 [[package]]
 name = "boto3-stubs"
-version = "1.39.14"
-description = "Type annotations for boto3 1.39.14 generated with mypy-boto3-builder 8.11.0"
+version = "1.39.15"
+description = "Type annotations for boto3 1.39.15 generated with mypy-boto3-builder 8.11.0"
 optional = false
 python-versions = ">=3.8"
 groups = ["dev"]
 files = [
-    {file = "boto3_stubs-1.39.14-py3-none-any.whl", hash = "sha256:28270e752243742493295777f62afca7c7f18ae6ff71ad1feb3ff927e79c95ef"},
-    {file = "boto3_stubs-1.39.14.tar.gz", hash = "sha256:34d89022be097442f02bd4e9a1fe75803cb6b5a3f6b4763bb6a5ebd7dd6d7dc9"},
+    {file = "boto3_stubs-1.39.15-py3-none-any.whl", hash = "sha256:ea6cee27f7971e7e157fad89ab8263cd552bee9a8b20aeb0e4f6c643577d1a2b"},
+    {file = "boto3_stubs-1.39.15.tar.gz", hash = "sha256:c84f975299318bf01336bb05caf0cc48d18ea0aefb4ed039e37235e9ac925afb"},
 ]
 
 [package.dependencies]
@@ -210,7 +210,7 @@ bedrock-data-automation-runtime = ["mypy-boto3-bedrock-data-automation-runtime (
 bedrock-runtime = ["mypy-boto3-bedrock-runtime (>=1.39.0,<1.40.0)"]
 billing = ["mypy-boto3-billing (>=1.39.0,<1.40.0)"]
 billingconductor = ["mypy-boto3-billingconductor (>=1.39.0,<1.40.0)"]
-boto3 = ["boto3 (==1.39.14)"]
+boto3 = ["boto3 (==1.39.15)"]
 braket = ["mypy-boto3-braket (>=1.39.0,<1.40.0)"]
 budgets = ["mypy-boto3-budgets (>=1.39.0,<1.40.0)"]
 ce = ["mypy-boto3-ce (>=1.39.0,<1.40.0)"]
@@ -584,14 +584,14 @@ reference = "nexus"
 
 [[package]]
 name = "botocore"
-version = "1.39.14"
+version = "1.39.15"
 description = "Low-level, data-driven core of boto 3."
 optional = false
 python-versions = ">= 3.9"
 groups = ["main", "dev"]
 files = [
-    {file = "botocore-1.39.14-py3-none-any.whl", hash = "sha256:4ed551c77194167b7e8063f33059bc2f9b2ead0ed4ee33dc7857273648ed4349"},
-    {file = "botocore-1.39.14.tar.gz", hash = "sha256:7fc44d4ad13b524e5d8a6296785776ef5898ac026ff74df9b35313831d507926"},
+    {file = "botocore-1.39.15-py3-none-any.whl", hash = "sha256:eb9cfe918ebfbfb8654e1b153b29f0c129d586d2c0d7fb4032731d49baf04cff"},
+    {file = "botocore-1.39.15.tar.gz", hash = "sha256:2aa29a717f14f8c7ca058c2e297aaed0aa10ecea24b91514eee802814d1b7600"},
 ]
 
 [package.dependencies]
@@ -788,6 +788,35 @@ files = [
 mccabe = ">=0.7.0,<0.8.0"
 pycodestyle = ">=2.14.0,<2.15.0"
 pyflakes = ">=3.4.0,<3.5.0"
+
+[package.source]
+type = "legacy"
+url = "https://monster-jj.jvj28.com:9091/repository/pypi/simple"
+reference = "nexus"
+
+[[package]]
+name = "inflect"
+version = "7.5.0"
+description = "Correctly generate plurals, singular nouns, ordinals, indefinite articles"
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = [
+    {file = "inflect-7.5.0-py3-none-any.whl", hash = "sha256:2aea70e5e70c35d8350b8097396ec155ffd68def678c7ff97f51aa69c1d92344"},
+    {file = "inflect-7.5.0.tar.gz", hash = "sha256:faf19801c3742ed5a05a8ce388e0d8fe1a07f8d095c82201eb904f5d27ad571f"},
+]
+
+[package.dependencies]
+more_itertools = ">=8.5.0"
+typeguard = ">=4.0.1"
+
+[package.extras]
+check = ["pytest-checkdocs (>=2.4)", "pytest-ruff (>=0.2.1) ; sys_platform != \"cygwin\""]
+cover = ["pytest-cov"]
+doc = ["furo", "jaraco.packaging (>=9.3)", "jaraco.tidelift (>=1.4)", "rst.linker (>=1.9)", "sphinx (>=3.5)", "sphinx-lint"]
+enabler = ["pytest-enabler (>=2.2)"]
+test = ["pygments", "pytest (>=6,!=8.1.*)"]
+type = ["pytest-mypy"]
 
 [package.source]
 type = "legacy"
@@ -1021,6 +1050,23 @@ groups = ["dev"]
 files = [
     {file = "mccabe-0.7.0-py2.py3-none-any.whl", hash = "sha256:6c2d30ab6be0e4a46919781807b4f0d834ebdd6c6e3dca0bda5a15f863427b6e"},
     {file = "mccabe-0.7.0.tar.gz", hash = "sha256:348e0240c33b60bbdf4e523192ef919f28cb2c3d7d5c7794f74009290f236325"},
+]
+
+[package.source]
+type = "legacy"
+url = "https://monster-jj.jvj28.com:9091/repository/pypi/simple"
+reference = "nexus"
+
+[[package]]
+name = "more-itertools"
+version = "10.7.0"
+description = "More routines for operating on iterables, beyond itertools"
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = [
+    {file = "more_itertools-10.7.0-py3-none-any.whl", hash = "sha256:d43980384673cb07d2f7d2d918c616b30c659c089ee23953f601d6609c67510e"},
+    {file = "more_itertools-10.7.0.tar.gz", hash = "sha256:9fddd5403be01a94b204faadcff459ec3568cf110265d3c54323e1e866ad29d3"},
 ]
 
 [package.source]
@@ -2029,14 +2075,14 @@ reference = "nexus"
 
 [[package]]
 name = "sck-core-db"
-version = "0.0.8"
+version = "0.0.9"
 description = "Core Database Library to access DynamoDB for Core-Automation"
 optional = false
 python-versions = ">=3.12,<4.0"
 groups = ["main"]
 files = [
-    {file = "sck_core_db-0.0.8-py3-none-any.whl", hash = "sha256:695a7d61e809b5a8c60c352a3c852590dac00ca3cab2d051018a44a2ba650889"},
-    {file = "sck_core_db-0.0.8.tar.gz", hash = "sha256:92e1b3c1193ad43e35aa29a9e2e275bc2ec3b0af3be50a4f4d459eeb2aff7fc4"},
+    {file = "sck_core_db-0.0.9-py3-none-any.whl", hash = "sha256:0b8eace3926263476a0f9f7eb9ca76d6ef72f24c5383faea4ded9d5d710d7e9d"},
+    {file = "sck_core_db-0.0.9.tar.gz", hash = "sha256:710c9f2a42b23002361bfb9ca7cb93f0ef4859344811ca9ed5ec2d791e93b430"},
 ]
 
 [package.dependencies]
@@ -2044,7 +2090,31 @@ boto3 = ">=1.39.9"
 botocore = ">=1.39.9"
 pydantic = ">=2.10.3,<3.0.0"
 pynamodb = ">=6.0.1,<7.0.0"
-sck-core-framework = ">=0.0.8,<0.0.9"
+sck-core-framework = ">=0.0.9,<0.0.10"
+
+[package.source]
+type = "legacy"
+url = "https://monster-jj.jvj28.com:9091/repository/pypi/simple"
+reference = "nexus"
+
+[[package]]
+name = "sck-core-execute"
+version = "0.0.9"
+description = "Core Automation Engine execute Lambda function"
+optional = false
+python-versions = ">=3.12,<4.0"
+groups = ["main"]
+files = [
+    {file = "sck_core_execute-0.0.9-py3-none-any.whl", hash = "sha256:082a7285c25a6ac92151ce4b358823ac93c62c331429b868a988b6a771b822bc"},
+    {file = "sck_core_execute-0.0.9.tar.gz", hash = "sha256:aab7b991b6cae43e7cddbb54903b317c6c6dcc27667573f6405241c7fbf718ec"},
+]
+
+[package.dependencies]
+boto3 = ">=1.39.9"
+botocore = ">=1.39.9"
+inflect = ">=7.5.0,<8.0.0"
+sck-core-db = ">=0.0.9,<0.0.10"
+sck-core-framework = ">=0.0.9,<0.0.10"
 
 [package.source]
 type = "legacy"
@@ -2053,14 +2123,14 @@ reference = "nexus"
 
 [[package]]
 name = "sck-core-framework"
-version = "0.0.8"
+version = "0.0.9"
 description = "Core-Framework for Core-Automation"
 optional = false
 python-versions = ">=3.12,<4.0"
 groups = ["main"]
 files = [
-    {file = "sck_core_framework-0.0.8-py3-none-any.whl", hash = "sha256:faa4ec5731feb3a6d3a5b35c47024ddd88aef79609f2d735ee4f34b521d4fd21"},
-    {file = "sck_core_framework-0.0.8.tar.gz", hash = "sha256:0cbc8eb53e9e7b1f8e760822931845d4bdce0abf8e655fd895b5aee7ac1d996e"},
+    {file = "sck_core_framework-0.0.9-py3-none-any.whl", hash = "sha256:f395bbba73068807547a78f3d79805f1d51147bc22d4ea8c707308b7a700d7eb"},
+    {file = "sck_core_framework-0.0.9.tar.gz", hash = "sha256:f2eb2f87913309a74fbd6c6244d3e6148a4c41ebf8b1e32d09593bcec5e8167a"},
 ]
 
 [package.dependencies]
@@ -2130,6 +2200,26 @@ files = [
     {file = "text-unidecode-1.3.tar.gz", hash = "sha256:bad6603bb14d279193107714b288be206cac565dfa49aa5b105294dd5c4aab93"},
     {file = "text_unidecode-1.3-py2.py3-none-any.whl", hash = "sha256:1311f10e8b895935241623731c2ba64f4c455287888b18189350b67134a822e8"},
 ]
+
+[package.source]
+type = "legacy"
+url = "https://monster-jj.jvj28.com:9091/repository/pypi/simple"
+reference = "nexus"
+
+[[package]]
+name = "typeguard"
+version = "4.4.4"
+description = "Run-time type checker for Python"
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = [
+    {file = "typeguard-4.4.4-py3-none-any.whl", hash = "sha256:b5f562281b6bfa1f5492470464730ef001646128b180769880468bd84b68b09e"},
+    {file = "typeguard-4.4.4.tar.gz", hash = "sha256:3a7fd2dffb705d4d0efaed4306a704c89b9dee850b688f060a8b1615a79e5f74"},
+]
+
+[package.dependencies]
+typing_extensions = ">=4.14.0"
 
 [package.source]
 type = "legacy"
@@ -2233,4 +2323,4 @@ reference = "nexus"
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "e00bd3bebce4c7bb9355293048e5beba61acb03ea61797e0f61c6feb5c50aa3d"
+content-hash = "a966f89dc48fa52fda6a97d442f168d43466cbef7ce7e59d047c7bed4f5eae43"

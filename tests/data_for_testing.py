@@ -7,12 +7,16 @@ for clients, portfolios, zones, and applications needed for deployspec testing.
 
 from typing import Any
 
+import core_logging as log
 import core_framework as util
 import core_helper.aws as aws
 
-from core_db.event import EventModel
-from core_db.item import ItemModel
-from core_db.registry.client import ClientFacts
+from core_db.event import EventModelFactory
+from core_db.item import ItemModelFactory
+from core_db.registry.client import ClientFactsFactory
+from core_db.registry.portfolio import PortfolioFactsFactory
+from core_db.registry.app import AppFactsFactory
+from core_db.registry.zone import ZoneFactsFactory
 from core_db.registry.portfolio import (
     PortfolioFacts,
     ContactFacts,
@@ -56,27 +60,39 @@ def bootstrap_dynamo() -> bool:
     ), "DYNAMODB_HOST must be set to http://localhost:8000"
 
     try:
-        if not EventModel.exists():
-            EventModel.create_table(wait=True)
+        client_name = util.get_client_name()
 
-        if not ItemModel.exists():
-            ItemModel.create_table(wait=True)
+        # use boto3 to connect to DynamoDB, get a list of all tables, then delete all tables
+        import boto3
 
-        if not ClientFacts.exists():
-            ClientFacts.create_table(wait=True)
+        dynamodb = boto3.resource("dynamodb", endpoint_url=host)
 
-        if not PortfolioFacts.exists():
-            PortfolioFacts.create_table(wait=True)
+        tables = dynamodb.tables.all()
+        if tables:
+            # delete all tables
+            for table in tables:
+                log.debug(f"Deleting table: {table.name}")
+                table.delete()
+                table.wait_until_not_exists()
+                log.debug(f"Table {table.name} deleted successfully.")
 
-        if not AppFacts.exists():
-            AppFacts.create_table(wait=True)
+        ClientFacts = ClientFactsFactory.get_model(client_name)
+        ClientFacts.create_table(wait=True)
 
-        # Fixed: Check if ZoneFacts exists before trying to delete
-        if ZoneFacts.exists():
-            ZoneFacts.delete_table()
+        PortfolioFacts = PortfolioFactsFactory.get_model(client_name)
+        PortfolioFacts.create_table(wait=True)
 
-        if not ZoneFacts.exists():
-            ZoneFacts.create_table(wait=True)
+        AppFacts = AppFactsFactory.get_model(client_name)
+        AppFacts.create_table(wait=True)
+
+        ZoneFacts = ZoneFactsFactory.get_model(client_name)
+        ZoneFacts.create_table(wait=True)
+
+        ItemModel = ItemModelFactory.get_model(client_name)
+        ItemModel.create_table(wait=True)
+
+        EventModel = EventModelFactory.get_model(client_name)
+        EventModel.create_table(wait=True)
 
     except Exception as e:
         print(f"Error bootstrapping DynamoDB: {e}")  # Fixed: use f-string
