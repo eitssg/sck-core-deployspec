@@ -8,7 +8,7 @@
   type: delete_stack
   params:
     stack_name: my-first-stack
-    parameters:
+    stack_parameters:
       build: 12345
     accounts:
       - 123456789012
@@ -18,7 +18,7 @@
   type: delete_change_set
   params:
     stack_name: my-first-stack
-    parameters:
+    stack_parameters:
       build: 12345
     accounts:
       - 123456789012

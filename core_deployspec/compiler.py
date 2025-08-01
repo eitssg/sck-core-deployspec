@@ -15,18 +15,9 @@ import json
 import core_logging as log
 
 import core_framework as util
+from copy import deepcopy
 
-from core_execute.actionlib.actions.aws.create_stack import CreateStackActionSpec
-from core_execute.actionlib.actions.aws.delete_stack import DeleteStackActionSpec
-from core_execute.actionlib.actions.aws.delete_user import DeleteUserActionSpec
-from core_execute.actionlib.actions.aws.put_user import PutUserActionSpec
-from core_execute.actionlib.actions.aws.delete_change_set import (
-    DeleteChangeSetActionSpec,
-)
-from core_execute.actionlib.actions.aws.apply_change_set import ApplyChangeSetActionSpec
-from core_execute.actionlib.actions.aws.create_change_set import (
-    CreateChangeSetActionSpec,
-)
+from core_execute.actionlib.factory import ActionFactory
 
 from jinja2 import Template
 
@@ -43,7 +34,6 @@ from core_framework.constants import (
     TAG_APP,
     TAG_BRANCH,
     TAG_BUILD,
-    V_EMPTY,
     V_PACKAGE_ZIP,
     V_DEPLOYSPEC_FILE_YAML,
     V_DEPLOYSPEC_FILE_JSON,
@@ -61,15 +51,7 @@ from core_framework.constants import (
 
 from core_db.facter import get_facts
 
-from core_framework.models import (
-    ActionSpec,
-    TaskPayload,
-    DeploySpec,
-    ActionSpec,
-    DeploymentDetails,
-    ActionDetails,
-    StateDetails,
-)
+from core_framework.models import ActionSpec, TaskPayload, DeploySpec, ActionSpec, DeploymentDetails
 
 from core_helper.magic import MagicS3Client
 
@@ -117,9 +99,7 @@ def load_deployspec(task_payload: TaskPayload) -> dict[str, DeploySpec]:
         raise ValueError("Package key is required")
 
     # Download file from S3
-    log.info(
-        "Downloading package from storage ({}) ({})".format(bucket_name, package_key)
-    )
+    log.info("Downloading package from storage ({}) ({})".format(bucket_name, package_key))
 
     # Get the storage location
     bucket = MagicS3Client.get_bucket(Region=region, BucketName=bucket_name)
@@ -127,6 +107,9 @@ def load_deployspec(task_payload: TaskPayload) -> dict[str, DeploySpec]:
     # If there is a package.zip file in this folder, we can process it.
     zip_fileobj = io.BytesIO()
     bucket.download_fileobj(Key=package_key, Fileobj=zip_fileobj)
+
+    # Reset Buffer Position
+    zip_fileobj.seek(0)  # Reset the pointer to the beginning so we can begin processing the zip
 
     # We have read the entire zip file into memory.  I hope it's not too big!!
     # Process the zip file and extract the deployspec file.
@@ -137,9 +120,7 @@ def load_deployspec(task_payload: TaskPayload) -> dict[str, DeploySpec]:
     return spec
 
 
-def process_package_zip(
-    task_payload: TaskPayload, zip_fileobj: io.BytesIO
-) -> dict[str, DeploySpec]:
+def process_package_zip(task_payload: TaskPayload, zip_fileobj: io.BytesIO) -> dict[str, DeploySpec]:
     """
     Process the zip package copying content to the artifacts store while extracting the actions
     into a DeploySpec object. (plan, apply, deploy, or teardown)
@@ -174,9 +155,7 @@ def process_package_zip(
 
     zipfile_obj = zip.ZipFile(zip_fileobj, "r")
 
-    log.debug(
-        "Extracting {} and Uploading artifact to: {}", V_PACKAGE_ZIP, upload_prefix
-    )
+    log.debug("Extracting {} and Uploading artifact to: {}", V_PACKAGE_ZIP, upload_prefix)
 
     bucket = MagicS3Client.get_bucket(Region=bucket_region, BucketName=bucket_name)
 
@@ -215,9 +194,7 @@ def process_package_zip(
 
     # Process deployspec
     if not specs:
-        raise Exception(
-            "Package does not contain any deployspec files, cannot continue"
-        )
+        raise Exception("Package does not contain any deployspec files, cannot continue")
 
     return specs
 
@@ -244,21 +221,13 @@ def get_accounts_regions(action_spec: ActionSpec) -> tuple[list[str], list[str]]
     >>> accounts, regions = get_accounts_regions(action_spec)
     >>> # Returns: (["123456789012"], ["us-east-1"])
     """
-    accounts = (
-        action_spec.params.get("accounts") or action_spec.params.get("Accounts") or []
-    )
+    accounts = action_spec.params.get("accounts") or action_spec.params.get("Accounts") or []
     account = action_spec.params.get("account") or action_spec.params.get("Account")
     if account and account not in accounts:
         accounts.append(account)
 
-    regions = (
-        action_spec.params.get("regions") or action_spec.params.get("Regions") or []
-    )
-    region = (
-        action_spec.params.get("region")
-        or action_spec.params.get("Region")
-        or util.get_region()
-    )
+    regions = action_spec.params.get("regions") or action_spec.params.get("Regions") or []
+    region = action_spec.params.get("region") or action_spec.params.get("Region") or util.get_region()
     if region and region not in regions:
         regions.append(region)
 
@@ -287,18 +256,34 @@ def get_region_account_labels(action_spec: ActionSpec) -> list[str]:
     """
     accounts, regions = get_accounts_regions(action_spec)
 
-    labels = [
-        f"{action_spec.label}-{account}-{region}"
-        for account in accounts
-        for region in regions
-    ]
+    labels = [__get_action_name(action_spec, account, region) for account in accounts for region in regions]
 
     return labels
 
 
-def compile_deployspec(
-    task_payload: TaskPayload, deployspec: DeploySpec
-) -> list[ActionSpec]:
+def __get_action_name(action_spec: ActionSpec, account: str, region: str) -> str:
+    """
+    Generate a unique action name based on the action specification, account, and region.
+
+    :param action_spec: The action specification to generate the name for
+    :type action_spec: ActionSpec
+    :param account: The AWS account ID for this action
+    :type account: str
+    :param region: The AWS region for this action
+    :type region: str
+    :returns: The generated action name
+    :rtype: str
+
+    Examples
+    --------
+    >>> action_spec = ActionSpec(label="create-vpc")
+    >>> name = __get_action_name(action_spec, "123456789012", "us-east-1")
+    >>> # Returns: "create-vpc-123456789012-us-east-1"
+    """
+    return f"{action_spec.label}-{account}-{region}"
+
+
+def compile_deployspec(task_payload: TaskPayload, deployspec: DeploySpec) -> list[ActionSpec]:
     """
     Convert deployspec into an actions list.
 
@@ -318,42 +303,25 @@ def compile_deployspec(
     >>> actions = compile_deployspec(task_payload, deployspec)
     >>> # Returns: [ActionSpec(...)]
     """
-    spec_label_map: SpecLabelMapType = {}
-    for action_spec in deployspec.action_specs:
-        spec_label_map[action_spec.label] = get_region_account_labels(action_spec)
+    spec_label_map = get_spec_label_map(deployspec.actions)
 
     log.debug("spec_label_map", details=spec_label_map)
-
-    # Catalog of known Deployspec types
-    routes: dict[str, dict] = {
-        "create_stack": {"allow_multiple_stacks": True, "kind": CreateStackActionSpec},
-        "delete_stack": {"allow_multiple_stacks": True, "kind": DeleteStackActionSpec},
-        "create_user": {"allow_multiple_stacks": False, "kind": PutUserActionSpec},
-        "delete_user": {"allow_multiple_stacks": False, "kind": DeleteUserActionSpec},
-        "create_change_set": {
-            "allow_multiple_stacks": False,
-            "kind": CreateChangeSetActionSpec,
-        },
-        "apply_change_set": {
-            "allow_multiple_stacks": False,
-            "kind": ApplyChangeSetActionSpec,
-        },
-        "delete_change_set": {
-            "allow_multiple_stacks": False,
-            "kind": DeleteChangeSetActionSpec,
-        },
-    }
 
     # For the actions specified in the deployspec, compile them into a list of actions for the core_execute module
     compiled_actions: list[ActionSpec] = []
     for action_spec in deployspec.action_specs:
-        params = routes.get(action_spec.type, None)
-        if not params:
-            raise ValueError(f"Unknown action type {action_spec.type}")
-        compiled_actions.extend(
-            compile_action(action_spec, task_payload, spec_label_map, **params)
-        )
+        if not ActionFactory.is_valid_action(action_spec.kind):
+            raise ValueError(f"Unknown action type {action_spec.kind}")
+        compiled_actions.extend(compile_action(action_spec, task_payload, spec_label_map))
     return compiled_actions
+
+
+def get_spec_label_map(actions: list[ActionSpec]) -> dict[str, list[str]]:
+
+    spec_label_map: SpecLabelMapType = {}
+    for action_spec in actions:
+        spec_label_map[action_spec.label] = get_region_account_labels(action_spec)
+    return spec_label_map
 
 
 def compile_action(
@@ -386,26 +354,11 @@ def compile_action(
     """
     accounts, regions = get_accounts_regions(action_spec)
 
-    allow_multiple_stacks = kwargs.get("allow_multiple_stacks", False)
-    klass = kwargs.get("kind", None)
-
-    if not allow_multiple_stacks:
-        if len(accounts) == 0 or len(regions) == 0:
-            raise ValueError("Missing account or region")
-
-        if len(accounts) > 1 or len(regions) > 1:
-            raise ValueError(
-                f"Cannot {action_spec.type} from multiple accounts or regions"
-            )
-
     action_list: list[ActionSpec] = []
     for account in accounts:
         for region in regions:
-            action_list.append(
-                generate_action_command(
-                    task_payload, action_spec, spec_label_map, account, region
-                )
-            )
+            execute_action = generate_action_command(task_payload, action_spec, spec_label_map, account, region)
+            action_list.append(execute_action)
     return action_list
 
 
@@ -441,70 +394,53 @@ def generate_action_command(
     >>> # Returns: ActionSpec with executable parameters
     """
 
-    if action_spec.action is None:
+    if action_spec.kind is None:
         raise ValueError("Action type is required that matches a valid Action model")
 
-    deployment_details = task_payload.deployment_details
-    package_details = task_payload.package
-    bucket_name = package_details.bucket_name
-    bucket_region = package_details.bucket_region
-    label = f"{action_spec.label}-{account}-{region}"
-    depends_on = __get_depends_on(action_spec, spec_label_map)
-    scope = __get_action_scope(action_spec, deployment_details)
-    klass = action_spec.kind
+    klass = ActionFactory.get_action_class(action_spec.kind)
+    if klass is None:
+        raise ValueError(f"Cannot find action class for {action_spec.kind}")
 
-    # These are the minimum required fields.
-    execute_action = {
-        "Label": label,
-        "Kind": action_spec.kind,
-        "DependsOn": depends_on,
-        "Params": {
-            "Account": account,
-            "Region": region,
-        },
-        "Scope": scope,
-    }
+    params = deepcopy(action_spec.params)
 
-    # Perform the following actions if the action_spec is PutUser
-    user_name = action_spec.params.get("user_name") or action_spec.params.get(
-        "UserName"
+    __delkeys(["account", "region", "accounts", "regions", "Accounts", "Regions"], params)
+
+    params["account"] = account
+    params["region"] = region
+
+    # Validate Parameters
+    params = klass.generate_action_parameters(**params)
+
+    # Check if the pydantic model has the "TemplateUrl" field, if it does
+    # update the path to the bucket deployment details.
+    if hasattr(params, "template_url"):
+        params.template_url = __get_action_template_url(
+            action_spec,
+            task_payload.actions.bucket_name,
+            task_payload.actions.bucket_region,
+            task_payload.deployment_details,
+        )
+
+    if hasattr(params, "stack_parameters"):
+        __apply_syntax_update(params.stack_parameters)
+
+    if hasattr(params, "tags"):
+        # Add default tags to all actions
+        params.tags = __get_tags(action_spec.scope, task_payload.deployment_details, params.tags)
+
+    # Validate ActionSpec.  Note, the "Kind" field is automatically updated in generate_action_spec
+    execute_action = klass.generate_action_spec(
+        **{
+            "Name": __get_action_name(action_spec, account, region),
+            "DependsOn": __get_depends_on(action_spec, spec_label_map),
+            "Params": params.model_dump(),
+        }
     )
-    if user_name:
-        execute_action["Params"]["UserName"] = user_name
-
-    # Perform the following actions if the action_spec is a CloudFormation action
-    if action_spec.action == "AWS::CreateStack":
-        stack_name = action_spec.params.get("stack_name") or action_spec.params.get(
-            "StackName"
-        )
-        if stack_name:
-            execute_action["Params"]["StackName"] = stack_name
-        stack_parameters = __apply_syntax_update(action_spec.params.parameters)
-        if stack_parameters:
-            execute_action["Params"]["StackParameters"] = stack_parameters
-        stack_policy = action_spec.params.get("stack_policy") or action_spec.params.get(
-            "StackPolicy"
-        )
-        if stack_policy:
-            # If the stack policy is a string, we will assume it's a JSON string.
-            # If it's a dict, we will convert it to a JSON string.
-            # If it's None, we will not include it in the action.
-            execute_action["Params"]["StackPolicy"] = __get_stack_policy_json(
-                stack_policy
-            )
-        template_url = get_action_template_url(
-            action_spec, bucket_name, bucket_region, deployment_details
-        )
-        if template_url:
-            execute_action["Params"]["TemplateUrl"] = template_url
-        tags = __get_tags(scope, deployment_details)
-        if tags:
-            execute_action["Params"]["Tags"] = tags
 
     return execute_action
 
 
-def get_action_template_url(
+def __get_action_template_url(
     action_spec: ActionSpec,
     bucket_name: str,
     bucket_region: str,
@@ -531,17 +467,15 @@ def get_action_template_url(
     >>> # Returns: "s3://my-bucket/artifacts/vpc.yaml"
     """
 
-    key = action_spec.params.get("template_url") or action_spec.params.get(
-        "TemplateUrl"
-    )
+    key = __getany(action_spec.params, ["template_url", "TemplateUrl", "template", "Template"])
     if key is None:
         return None
     scope = __get_action_scope(action_spec, deployment_details)
 
-    return get_template_url(bucket_name, bucket_region, deployment_details, key, scope)
+    return __get_template_url(bucket_name, bucket_region, deployment_details, key, scope)
 
 
-def get_template_url(
+def __get_template_url(
     bucket_name: str,
     bucket_region: str,
     dd: DeploymentDetails,
@@ -660,30 +594,7 @@ def apply_context(actions: list[ActionSpec], context: dict) -> list[ActionSpec]:
     return actions
 
 
-def __get_stack_policy_json(stack_policy: str | dict | None) -> str | None:
-    """
-    Convert stack policy to JSON string format if defined.
-
-    :param stack_policy: The input policy as string, dict, or None
-    :type stack_policy: str | dict | None
-    :returns: Policy statement in JSON format or None
-    :rtype: str | None
-
-    Examples
-    --------
-    >>> policy = {"Statement": [{"Effect": "Allow", "Principal": "*", "Action": "*"}]}
-    >>> json_policy = __get_stack_policy_json(policy)
-    >>> # Returns: '{"Statement": [{"Effect": "Allow", "Principal": "*", "Action": "*"}]}'
-    """
-    if not stack_policy:
-        return None
-    if isinstance(stack_policy, dict) or isinstance(stack_policy, str):
-        return util.to_json(stack_policy)
-    else:
-        return None
-
-
-def __get_tags(scope: str | None, deployment_details: DeploymentDetails) -> dict | None:
+def __get_tags(scope: str | None, deployment_details: DeploymentDetails, user_tags: dict[str, str] | None) -> dict | None:
     """
     Generate AWS tags based on deployment scope and details.
 
@@ -691,19 +602,21 @@ def __get_tags(scope: str | None, deployment_details: DeploymentDetails) -> dict
     :type scope: str | None
     :param deployment_details: The deployment details containing tag information
     :type deployment_details: DeploymentDetails
+    :param user_tags: Tags that will override deployment_details tags and add to the action tags
+    :type user_tags: dict[str, str] | None
     :returns: Dictionary of AWS tags or None if no tags
     :rtype: dict | None
+
 
     Examples
     --------
     >>> tags = __get_tags("build", deployment_details)
     >>> # Returns: {"Portfolio": "core", "App": "api", "Branch": "master", "Build": "1234"}
     """
-
-    if not scope or scope == V_EMPTY:
-        scope = SCOPE_BUILD
-
     tags: dict[str, str] = deployment_details.tags or {}
+
+    if not scope:
+        scope = SCOPE_BUILD
 
     if deployment_details.portfolio:
         tags[TAG_PORTFOLIO] = deployment_details.portfolio
@@ -716,6 +629,8 @@ def __get_tags(scope: str | None, deployment_details: DeploymentDetails) -> dict
 
     if scope == SCOPE_BUILD and deployment_details.build:
         tags[TAG_BUILD] = deployment_details.build
+
+    tags.update(user_tags)
 
     return tags if len(tags) > 0 else None
 
@@ -747,9 +662,7 @@ def __apply_syntax_update(stack_parameters: dict | None) -> dict | None:
         stack_parameters[key] = re.sub(
             r"{{ (?!core.)([^.]*)\.(.*) }}",
             r"{{ '\1/\2' | lookup }}",
-            "{}".format(
-                stack_parameters[key]
-            ),  # Must be a string for re.sub to work, so fails when your parameter is a number.
+            "{}".format(stack_parameters[key]),  # Must be a string for re.sub to work, so fails when your parameter is a number.
         )
     return stack_parameters
 
@@ -775,18 +688,12 @@ def __get_depends_on(action: ActionSpec, spec_label_map: SpecLabelMapType) -> li
     if not action.depends_on:
         return []
 
-    depends_on: list = [
-        item
-        for sublist in map(lambda label: spec_label_map[label], action.depends_on)
-        for item in sublist
-    ]
+    depends_on: list = [item for sublist in map(lambda name: spec_label_map[name], action.depends_on) for item in sublist]
 
     return depends_on
 
 
-def __get_action_scope(
-    action: ActionSpec, deployment_details: DeploymentDetails
-) -> str:
+def __get_action_scope(action: ActionSpec, deployment_details: DeploymentDetails) -> str:
     """
     Determine the deployment scope for an action based on stack name templates.
 
@@ -816,7 +723,7 @@ def __get_action_scope(
     if deployment_details.scope:
         return deployment_details.scope
 
-    stack_name = action.params.get("stack_name") or action.params.get("StackName") or ""
+    stack_name = __getany(action.params, ["stack_name", "StackName"], "")
 
     return __get_stack_scope(stack_name)
 
@@ -855,3 +762,19 @@ def __get_stack_scope(stack_name: str) -> str:
     log.debug("Build scope={}, stack_name={}", scope, stack_name)
 
     return scope
+
+
+def __getany(data: dict, keys: list[str], default: Any = None) -> Any:
+    """Returns value for the first key it finds with a non-Empty value or the specified default"""
+    for key in keys:
+        value = data.get(key)
+        if value:
+            return value
+    return default
+
+
+def __delkeys(keys: list, data: dict) -> None:
+    """Mutates data by deleting keys you specify"""
+    for key in keys:
+        if key in data:
+            del data[key]

@@ -13,23 +13,14 @@ import core_helper.aws as aws
 
 from core_db.event import EventModelFactory
 from core_db.item import ItemModelFactory
-from core_db.registry.client import ClientFactsFactory
-from core_db.registry.portfolio import PortfolioFactsFactory
-from core_db.registry.app import AppFactsFactory
-from core_db.registry.zone import ZoneFactsFactory
-from core_db.registry.portfolio import (
-    PortfolioFacts,
-    ContactFacts,
-    ApproverFacts,
-    ProjectFacts,
-    OwnerFacts,
-)
-from core_db.registry.app import AppFacts
+from core_db.registry.client import ClientFacts, ClientFactsFactory
+from core_db.registry.app import AppFacts, AppFactsFactory
+from core_db.registry.portfolio import PortfolioFacts, ContactFacts, ApproverFacts, ProjectFacts, OwnerFacts, PortfolioFactsFactory
 from core_db.registry.zone import (
     ZoneFacts,
-    ZoneFacts,
-    AccountFacts as AccountFactsModel,
-    RegionFacts as RegionFactsModel,
+    ZoneFactsFactory,
+    AccountFacts,
+    RegionFacts,
     KmsFacts,
     SecurityAliasFacts,
     ProxyFacts,
@@ -55,9 +46,7 @@ def bootstrap_dynamo() -> bool:
     # see environment variables in .env
     host = util.get_dynamodb_host()
 
-    assert (
-        host == "http://localhost:8000"
-    ), "DYNAMODB_HOST must be set to http://localhost:8000"
+    assert host == "http://localhost:8000", "DYNAMODB_HOST must be set to http://localhost:8000"
 
     try:
         client_name = util.get_client_name()
@@ -96,9 +85,7 @@ def bootstrap_dynamo() -> bool:
 
     except Exception as e:
         print(f"Error bootstrapping DynamoDB: {e}")  # Fixed: use f-string
-        assert (
-            False
-        ), f"Failed to bootstrap DynamoDB: {e}"  # Fixed: provide error message
+        assert False, f"Failed to bootstrap DynamoDB: {e}"  # Fixed: provide error message
 
     return True
 
@@ -142,9 +129,7 @@ def get_organization() -> dict[str, str]:
     return organization
 
 
-def get_client_data(
-    organization: dict[str, str], arguments: dict[str, Any]
-) -> ClientFacts:
+def get_client_data(organization: dict[str, str], arguments: dict[str, Any]) -> ClientFacts:
     """
     Create and save ClientFacts test data.
 
@@ -194,9 +179,7 @@ def get_client_data(
     return cf
 
 
-def get_portfolio_data(
-    client_data: ClientFacts, arguments: dict[str, Any]
-) -> PortfolioFacts:
+def get_portfolio_data(client_data: ClientFacts, arguments: dict[str, Any]) -> PortfolioFacts:
     """
     Create and save PortfolioFacts test data.
 
@@ -224,9 +207,7 @@ def get_portfolio_data(
     portfolio = PortfolioFacts(
         client=client,  # Fixed: use lowercase field names
         portfolio=portfolio_name,  # Fixed: use lowercase field names
-        contacts=[
-            ContactFacts(name="John Doe", email="john.doe@example.com")
-        ],  # Fixed: email domain
+        contacts=[ContactFacts(name="John Doe", email="john.doe@example.com")],  # Fixed: email domain
         approvers=[
             ApproverFacts(
                 name="Jane Doe",
@@ -235,15 +216,9 @@ def get_portfolio_data(
                 sequence=1,
             )
         ],  # Fixed: email
-        project=ProjectFacts(
-            name="my-project", description="my project description", code="MYPRJ"
-        ),
-        bizapp=ProjectFacts(
-            name="my-bizapp", description="my bizapp description", code="MYBIZ"
-        ),
-        owner=OwnerFacts(
-            name="John Doe", email="john.doe@example.com"
-        ),  # Fixed: email domain
+        project=ProjectFacts(name="my-project", description="my project description", code="MYPRJ"),
+        bizapp=ProjectFacts(name="my-bizapp", description="my bizapp description", code="MYBIZ"),
+        owner=OwnerFacts(name="John Doe", email="john.doe@example.com"),  # Fixed: email domain
         domain=f"my-app.{domain_name}",
         tags={
             "BizApp": "MyBizApp",  # Fixed: typo in "BizzApp"
@@ -281,7 +256,7 @@ def get_zone_data(client_data: ClientFacts, arguments: dict[str, Any]) -> ZoneFa
     zone = ZoneFacts(
         client=client_data.Client,  # Fixed: use lowercase field names
         zone="my-automation-service-zone",
-        account_facts=AccountFactsModel(  # Fixed: use lowercase field names
+        account_facts=AccountFacts(  # Fixed: use lowercase field names
             client=client_data.Client,
             aws_account_id=automation_account_id,
             organizational_unit="PrimaryUnit",
@@ -307,7 +282,7 @@ def get_zone_data(client_data: ClientFacts, arguments: dict[str, Any]) -> ZoneFa
             tags={"Zone": "my-automation-service-zone"},
         ),
         region_facts={
-            "sin": RegionFactsModel(
+            "sin": RegionFacts(
                 aws_region="ap-southeast-1",
                 az_count=3,
                 image_aliases={"imageid:latest": "ami-2342342342344"},
@@ -319,9 +294,7 @@ def get_zone_data(client_data: ClientFacts, arguments: dict[str, Any]) -> ZoneFa
                             value="192.168.0.0/16",
                             description="Global CIDR 1",
                         ),
-                        SecurityAliasFacts(
-                            type="cidr", value="10.0.0.0/8", description="Global CIDR 2"
-                        ),
+                        SecurityAliasFacts(type="cidr", value="10.0.0.0/8", description="Global CIDR 2"),
                     ]
                 },
                 security_group_aliases={
@@ -351,9 +324,7 @@ def get_zone_data(client_data: ClientFacts, arguments: dict[str, Any]) -> ZoneFa
     return zone
 
 
-def get_app_data(
-    portfolio_data: PortfolioFacts, zone_data: ZoneFacts, arguments: dict[str, Any]
-) -> AppFacts:
+def get_app_data(portfolio_data: PortfolioFacts, zone_data: ZoneFacts, arguments: dict[str, Any]) -> AppFacts:
     """
     Create and save AppFacts test data.
 

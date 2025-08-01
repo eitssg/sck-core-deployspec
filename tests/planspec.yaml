@@ -3,7 +3,7 @@
   params:
     stack_name: my-first-stack
     template: template.yaml
-    parameters:
+    stack_parameters:
       build: 12345
     accounts:
       - 123456789012
