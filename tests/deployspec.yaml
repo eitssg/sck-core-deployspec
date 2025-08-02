@@ -4,7 +4,7 @@
     user_name: bob
     accounts: ["123456789012", "123456789013", "123456789014"]
     regions: ["us-east-1", "us-west-2"]
-  depends_on:
+  depends_on: []
 - label: test1-delete-user
   type: aws.delete_user
   params:
@@ -15,11 +15,12 @@
 - label: test1-create-stack
   type: create_stack
   params:
-    stack_name: "{{ portfolio }}-stack-{{ app }}-{{ build }}"
+    stack_name: "{{ Portfolio }}-stack-{{ App }}-{{ BranchShortName }}-{{ Build }}"
     template: template.yaml
     stack_parameters:
       build: 12345
-      BucketName: "{{ portfolio.name }}"
+      BucketName: "{{ ArtefactsBucketName }}"
+      Portfolio: "{{ Portfolio }}"
     accounts:
       - "123456789012"
       - "123456789013"
@@ -35,4 +36,4 @@
         - Effect: "Allow"
           Principal: "*"
           Action: "*"
-  depends_on:
+  depends_on: []

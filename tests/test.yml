@@ -1,0 +1,504 @@
+  - Name: test1-create-user-123456789012-us-east-1
+    Kind: AWS::CreateUser
+    Params:
+      Account: '123456789012'
+      Region: us-east-1
+      UserNames:
+        - bob
+      Roles: []
+    Scope: build
+    SaveOutputs: true
+  - Name: test1-create-user-123456789012-us-west-2
+    Kind: AWS::CreateUser
+    Params:
+      Account: '123456789012'
+      Region: us-west-2
+      UserNames:
+        - bob
+      Roles: []
+    Scope: build
+    SaveOutputs: true
+  - Name: test1-create-user-123456789012-ap-southeast-1
+    Kind: AWS::CreateUser
+    Params:
+      Account: '123456789012'
+      Region: ap-southeast-1
+      UserNames:
+        - bob
+      Roles: []
+    Scope: build
+    SaveOutputs: true
+  - Name: test1-create-user-123456789013-us-east-1
+    Kind: AWS::CreateUser
+    Params:
+      Account: '123456789013'
+      Region: us-east-1
+      UserNames:
+        - bob
+      Roles: []
+    Scope: build
+    SaveOutputs: true
+  - Name: test1-create-user-123456789013-us-west-2
+    Kind: AWS::CreateUser
+    Params:
+      Account: '123456789013'
+      Region: us-west-2
+      UserNames:
+        - bob
+      Roles: []
+    Scope: build
+    SaveOutputs: true
+  - Name: test1-create-user-123456789013-ap-southeast-1
+    Kind: AWS::CreateUser
+    Params:
+      Account: '123456789013'
+      Region: ap-southeast-1
+      UserNames:
+        - bob
+      Roles: []
+    Scope: build
+    SaveOutputs: true
+  - Name: test1-create-user-123456789014-us-east-1
+    Kind: AWS::CreateUser
+    Params:
+      Account: '123456789014'
+      Region: us-east-1
+      UserNames:
+        - bob
+      Roles: []
+    Scope: build
+    SaveOutputs: true
+  - Name: test1-create-user-123456789014-us-west-2
+    Kind: AWS::CreateUser
+    Params:
+      Account: '123456789014'
+      Region: us-west-2
+      UserNames:
+        - bob
+      Roles: []
+    Scope: build
+    SaveOutputs: true
+  - Name: test1-create-user-123456789014-ap-southeast-1
+    Kind: AWS::CreateUser
+    Params:
+      Account: '123456789014'
+      Region: ap-southeast-1
+      UserNames:
+        - bob
+      Roles: []
+    Scope: build
+    SaveOutputs: true
+  - Name: test1-delete-user-123456789012-us-east-1
+    Kind: AWS::DeleteUser
+    DependsOn:
+      - test1-create-user-123456789012-us-east-1
+      - test1-create-user-123456789012-us-west-2
+      - test1-create-user-123456789012-ap-southeast-1
+      - test1-create-user-123456789013-us-east-1
+      - test1-create-user-123456789013-us-west-2
+      - test1-create-user-123456789013-ap-southeast-1
+      - test1-create-user-123456789014-us-east-1
+      - test1-create-user-123456789014-us-west-2
+      - test1-create-user-123456789014-ap-southeast-1
+    Params:
+      Account: '123456789012'
+      Region: us-east-1
+      UserNames:
+        - bob
+    Scope: build
+    SaveOutputs: true
+  - Name: test1-delete-user-123456789012-us-west-2
+    Kind: AWS::DeleteUser
+    DependsOn:
+      - test1-create-user-123456789012-us-east-1
+      - test1-create-user-123456789012-us-west-2
+      - test1-create-user-123456789012-ap-southeast-1
+      - test1-create-user-123456789013-us-east-1
+      - test1-create-user-123456789013-us-west-2
+      - test1-create-user-123456789013-ap-southeast-1
+      - test1-create-user-123456789014-us-east-1
+      - test1-create-user-123456789014-us-west-2
+      - test1-create-user-123456789014-ap-southeast-1
+    Params:
+      Account: '123456789012'
+      Region: us-west-2
+      UserNames:
+        - bob
+    Scope: build
+    SaveOutputs: true
+  - Name: test1-delete-user-123456789012-ap-southeast-1
+    Kind: AWS::DeleteUser
+    DependsOn:
+      - test1-create-user-123456789012-us-east-1
+      - test1-create-user-123456789012-us-west-2
+      - test1-create-user-123456789012-ap-southeast-1
+      - test1-create-user-123456789013-us-east-1
+      - test1-create-user-123456789013-us-west-2
+      - test1-create-user-123456789013-ap-southeast-1
+      - test1-create-user-123456789014-us-east-1
+      - test1-create-user-123456789014-us-west-2
+      - test1-create-user-123456789014-ap-southeast-1
+    Params:
+      Account: '123456789012'
+      Region: ap-southeast-1
+      UserNames:
+        - bob
+    Scope: build
+    SaveOutputs: true
+  - Name: test1-delete-user-123456789013-us-east-1
+    Kind: AWS::DeleteUser
+    DependsOn:
+      - test1-create-user-123456789012-us-east-1
+      - test1-create-user-123456789012-us-west-2
+      - test1-create-user-123456789012-ap-southeast-1
+      - test1-create-user-123456789013-us-east-1
+      - test1-create-user-123456789013-us-west-2
+      - test1-create-user-123456789013-ap-southeast-1
+      - test1-create-user-123456789014-us-east-1
+      - test1-create-user-123456789014-us-west-2
+      - test1-create-user-123456789014-ap-southeast-1
+    Params:
+      Account: '123456789013'
+      Region: us-east-1
+      UserNames:
+        - bob
+    Scope: build
+    SaveOutputs: true
+  - Name: test1-delete-user-123456789013-us-west-2
+    Kind: AWS::DeleteUser
+    DependsOn:
+      - test1-create-user-123456789012-us-east-1
+      - test1-create-user-123456789012-us-west-2
+      - test1-create-user-123456789012-ap-southeast-1
+      - test1-create-user-123456789013-us-east-1
+      - test1-create-user-123456789013-us-west-2
+      - test1-create-user-123456789013-ap-southeast-1
+      - test1-create-user-123456789014-us-east-1
+      - test1-create-user-123456789014-us-west-2
+      - test1-create-user-123456789014-ap-southeast-1
+    Params:
+      Account: '123456789013'
+      Region: us-west-2
+      UserNames:
+        - bob
+    Scope: build
+    SaveOutputs: true
+  - Name: test1-delete-user-123456789013-ap-southeast-1
+    Kind: AWS::DeleteUser
+    DependsOn:
+      - test1-create-user-123456789012-us-east-1
+      - test1-create-user-123456789012-us-west-2
+      - test1-create-user-123456789012-ap-southeast-1
+      - test1-create-user-123456789013-us-east-1
+      - test1-create-user-123456789013-us-west-2
+      - test1-create-user-123456789013-ap-southeast-1
+      - test1-create-user-123456789014-us-east-1
+      - test1-create-user-123456789014-us-west-2
+      - test1-create-user-123456789014-ap-southeast-1
+    Params:
+      Account: '123456789013'
+      Region: ap-southeast-1
+      UserNames:
+        - bob
+    Scope: build
+    SaveOutputs: true
+  - Name: test1-delete-user-123456789014-us-east-1
+    Kind: AWS::DeleteUser
+    DependsOn:
+      - test1-create-user-123456789012-us-east-1
+      - test1-create-user-123456789012-us-west-2
+      - test1-create-user-123456789012-ap-southeast-1
+      - test1-create-user-123456789013-us-east-1
+      - test1-create-user-123456789013-us-west-2
+      - test1-create-user-123456789013-ap-southeast-1
+      - test1-create-user-123456789014-us-east-1
+      - test1-create-user-123456789014-us-west-2
+      - test1-create-user-123456789014-ap-southeast-1
+    Params:
+      Account: '123456789014'
+      Region: us-east-1
+      UserNames:
+        - bob
+    Scope: build
+    SaveOutputs: true
+  - Name: test1-delete-user-123456789014-us-west-2
+    Kind: AWS::DeleteUser
+    DependsOn:
+      - test1-create-user-123456789012-us-east-1
+      - test1-create-user-123456789012-us-west-2
+      - test1-create-user-123456789012-ap-southeast-1
+      - test1-create-user-123456789013-us-east-1
+      - test1-create-user-123456789013-us-west-2
+      - test1-create-user-123456789013-ap-southeast-1
+      - test1-create-user-123456789014-us-east-1
+      - test1-create-user-123456789014-us-west-2
+      - test1-create-user-123456789014-ap-southeast-1
+    Params:
+      Account: '123456789014'
+      Region: us-west-2
+      UserNames:
+        - bob
+    Scope: build
+    SaveOutputs: true
+  - Name: test1-delete-user-123456789014-ap-southeast-1
+    Kind: AWS::DeleteUser
+    DependsOn:
+      - test1-create-user-123456789012-us-east-1
+      - test1-create-user-123456789012-us-west-2
+      - test1-create-user-123456789012-ap-southeast-1
+      - test1-create-user-123456789013-us-east-1
+      - test1-create-user-123456789013-us-west-2
+      - test1-create-user-123456789013-ap-southeast-1
+      - test1-create-user-123456789014-us-east-1
+      - test1-create-user-123456789014-us-west-2
+      - test1-create-user-123456789014-ap-southeast-1
+    Params:
+      Account: '123456789014'
+      Region: ap-southeast-1
+      UserNames:
+        - bob
+    Scope: build
+    SaveOutputs: true
+  - Name: test1-create-stack-123456789012-us-east-1
+    Kind: AWS::CreateStack
+    Params:
+      Account: '123456789012'
+      Region: us-east-1
+      StackName: '{{ portfolio }}-stack-{{ app }}-{{ build }}'
+      TemplateUrl: 
+        P:\\core\\test-client-core-automation-ap-southeast-1\\artefacts\\my-portfolio\\my-app\\my-branch\\dp-build\\template.yaml
+      StackParameters:
+        build: '12345'
+        BucketName: '{{ "portfolio/name" | lookup }}'
+      OnFailure: DELETE
+      TimeoutInMinutes: 15
+      Tags:
+        Portfolio: my-portfolio
+        App: my-app
+        Branch: my-branch
+        Build: dp-build
+        Depatment: unique
+        Name: central
+      StackPolicy:
+        Statement:
+          - Effect: "Allow"
+            Principal: "*"
+            Action: "*"
+    Scope: build
+    SaveOutputs: true
+  - Name: test1-create-stack-123456789012-us-west-2
+    Kind: AWS::CreateStack
+    Params:
+      Account: '123456789012'
+      Region: us-west-2
+      StackName: '{{ portfolio }}-stack-{{ app }}-{{ build }}'
+      TemplateUrl: 
+        P:\\core\\test-client-core-automation-ap-southeast-1\\artefacts\\my-portfolio\\my-app\\my-branch\\dp-build\\template.yaml
+      StackParameters:
+        build: '12345'
+        BucketName: '{{ "portfolio/name" | lookup }}'
+      OnFailure: DELETE
+      TimeoutInMinutes: 15
+      Tags:
+        Portfolio: my-portfolio
+        App: my-app
+        Branch: my-branch
+        Build: dp-build
+        Depatment: unique
+        Name: central
+      StackPolicy:
+        Statement:
+          - Effect: "Allow"
+            Principal: "*"
+            Action: "*"
+    Scope: build
+    SaveOutputs: true
+  - Name: test1-create-stack-123456789012-ap-southeast-1
+    Kind: AWS::CreateStack
+    Params:
+      Account: '123456789012'
+      Region: ap-southeast-1
+      StackName: '{{ portfolio }}-stack-{{ app }}-{{ build }}'
+      TemplateUrl: 
+        P:\\core\\test-client-core-automation-ap-southeast-1\\artefacts\\my-portfolio\\my-app\\my-branch\\dp-build\\template.yaml
+      StackParameters:
+        build: '12345'
+        BucketName: '{{ "portfolio/name" | lookup }}'
+      OnFailure: DELETE
+      TimeoutInMinutes: 15
+      Tags:
+        Portfolio: my-portfolio
+        App: my-app
+        Branch: my-branch
+        Build: dp-build
+        Depatment: unique
+        Name: central
+      StackPolicy:
+        Statement:
+          - Effect: "Allow"
+            Principal: "*"
+            Action: "*"
+    Scope: build
+    SaveOutputs: true
+  - Name: test1-create-stack-123456789013-us-east-1
+    Kind: AWS::CreateStack
+    Params:
+      Account: '123456789013'
+      Region: us-east-1
+      StackName: '{{ portfolio }}-stack-{{ app }}-{{ build }}'
+      TemplateUrl: 
+        P:\\core\\test-client-core-automation-ap-southeast-1\\artefacts\\my-portfolio\\my-app\\my-branch\\dp-build\\template.yaml
+      StackParameters:
+        build: '12345'
+        BucketName: '{{ "portfolio/name" | lookup }}'
+      OnFailure: DELETE
+      TimeoutInMinutes: 15
+      Tags:
+        Portfolio: my-portfolio
+        App: my-app
+        Branch: my-branch
+        Build: dp-build
+        Depatment: unique
+        Name: central
+      StackPolicy:
+        Statement:
+          - Effect: "Allow"
+            Principal: "*"
+            Action: "*"
+    Scope: build
+    SaveOutputs: true
+  - Name: test1-create-stack-123456789013-us-west-2
+    Kind: AWS::CreateStack
+    Params:
+      Account: '123456789013'
+      Region: us-west-2
+      StackName: '{{ portfolio }}-stack-{{ app }}-{{ build }}'
+      TemplateUrl: 
+        P:\\core\\test-client-core-automation-ap-southeast-1\\artefacts\\my-portfolio\\my-app\\my-branch\\dp-build\\template.yaml
+      StackParameters:
+        build: '12345'
+        BucketName: '{{ "portfolio/name" | lookup }}'
+      OnFailure: DELETE
+      TimeoutInMinutes: 15
+      Tags:
+        Portfolio: my-portfolio
+        App: my-app
+        Branch: my-branch
+        Build: dp-build
+        Depatment: unique
+        Name: central
+      StackPolicy:
+        Statement:
+          - Effect: "Allow"
+            Principal: "*"
+            Action: "*"
+    Scope: build
+    SaveOutputs: true
+  - Name: test1-create-stack-123456789013-ap-southeast-1
+    Kind: AWS::CreateStack
+    Params:
+      Account: '123456789013'
+      Region: ap-southeast-1
+      StackName: '{{ portfolio }}-stack-{{ app }}-{{ build }}'
+      TemplateUrl: 
+        P:\\core\\test-client-core-automation-ap-southeast-1\\artefacts\\my-portfolio\\my-app\\my-branch\\dp-build\\template.yaml
+      StackParameters:
+        build: '12345'
+        BucketName: '{{ "portfolio/name" | lookup }}'
+      OnFailure: DELETE
+      TimeoutInMinutes: 15
+      Tags:
+        Portfolio: my-portfolio
+        App: my-app
+        Branch: my-branch
+        Build: dp-build
+        Depatment: unique
+        Name: central
+      StackPolicy:
+        Statement:
+          - Effect: "Allow"
+            Principal: "*"
+            Action: "*"
+    Scope: build
+    SaveOutputs: true
+  - Name: test1-create-stack-123456789014-us-east-1
+    Kind: AWS::CreateStack
+    Params:
+      Account: '123456789014'
+      Region: us-east-1
+      StackName: '{{ portfolio }}-stack-{{ app }}-{{ build }}'
+      TemplateUrl: 
+        P:\\core\\test-client-core-automation-ap-southeast-1\\artefacts\\my-portfolio\\my-app\\my-branch\\dp-build\\template.yaml
+      StackParameters:
+        build: '12345'
+        BucketName: '{{ "portfolio/name" | lookup }}'
+      OnFailure: DELETE
+      TimeoutInMinutes: 15
+      Tags:
+        Portfolio: my-portfolio
+        App: my-app
+        Branch: my-branch
+        Build: dp-build
+        Depatment: unique
+        Name: central
+      StackPolicy:
+        Statement:
+          - Effect: "Allow"
+            Principal: "*"
+            Action: "*"
+    Scope: build
+    SaveOutputs: true
+  - Name: test1-create-stack-123456789014-us-west-2
+    Kind: AWS::CreateStack
+    Params:
+      Account: '123456789014'
+      Region: us-west-2
+      StackName: '{{ portfolio }}-stack-{{ app }}-{{ build }}'
+      TemplateUrl: 
+        P:\\core\\test-client-core-automation-ap-southeast-1\\artefacts\\my-portfolio\\my-app\\my-branch\\dp-build\\template.yaml
+      StackParameters:
+        build: '12345'
+        BucketName: '{{ "portfolio/name" | lookup }}'
+      OnFailure: DELETE
+      TimeoutInMinutes: 15
+      Tags:
+        Portfolio: my-portfolio
+        App: my-app
+        Branch: my-branch
+        Build: dp-build
+        Depatment: unique
+        Name: central
+      StackPolicy:
+        Statement:
+          - Effect: "Allow"
+            Principal: "*"
+            Action: "*"
+    Scope: build
+    SaveOutputs: true
+  - Name: test1-create-stack-123456789014-ap-southeast-1
+    Kind: AWS::CreateStack
+    Params:
+      Account: '123456789014'
+      Region: ap-southeast-1
+      StackName: '{{ portfolio }}-stack-{{ app }}-{{ build }}'
+      TemplateUrl: 
+        P:\\core\\test-client-core-automation-ap-southeast-1\\artefacts\\my-portfolio\\my-app\\my-branch\\dp-build\\template.yaml
+      StackParameters:
+        build: '12345'
+        BucketName: '{{ "portfolio/name" | lookup }}'
+      OnFailure: DELETE
+      TimeoutInMinutes: 15
+      Tags:
+        Portfolio: my-portfolio
+        App: my-app
+        Branch: my-branch
+        Build: dp-build
+        Depatment: unique
+        Name: central
+      StackPolicy:
+        Statement:
+          - Effect: "Allow"
+            Principal: "*"
+            Action: "*"
+    Scope: build
+    SaveOutputs: true

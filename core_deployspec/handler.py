@@ -9,12 +9,7 @@ compiled actions through the core_execute module.
 from typing import Any
 
 import core_logging as log
-import core_framework as util
 
-from core_framework.constants import (
-    TP_DEPLOYMENT_DETAILS,
-    TR_RESPONSE,
-)
 from core_framework.status import COMPILE_FAILED, COMPILE_COMPLETE, COMPILE_IN_PROGRESS
 
 from .compiler import (
@@ -71,15 +66,15 @@ def handler(event: dict, context: Any | None) -> dict:
         specs = load_deployspec(task_payload)
 
         compilation_summary = {
-            "specs_found": list(specs.keys()),
-            "specs_compiled": [],
-            "total_actions_generated": 0,
-            "compilation_status": "success",
+            "SpecsFound": list(specs.keys()),
+            "SpecsCompiled": [],
+            "TotalActionsGenerated": 0,
+            "CompilationStatus": "success",
         }
 
         task_payloads: list[TaskPayload] = []
 
-        log.debug("Compiling deployspecs", details=specs)
+        log.debug("Compiling deployspecs")
 
         # Compile all deployspecs in the package (deploy, teardown, plan, apply)
         for task, spec in specs.items():
@@ -87,9 +82,7 @@ def handler(event: dict, context: Any | None) -> dict:
             # Create a new task-specific payload by copying the original
             task_specific_payload = TaskPayload(**task_payload.model_dump())
             task_specific_payload.task = task
-            task_payloads.append(
-                task_specific_payload
-            )  # Fixed: append the task_specific_payload
+            task_payloads.append(task_specific_payload)  # Fixed: append the task_specific_payload
 
             log.debug(f"Processing task: {task}", details=spec.model_dump())
 
@@ -107,8 +100,8 @@ def handler(event: dict, context: Any | None) -> dict:
             save_state(task_specific_payload, context_data)
 
             # Update compilation summary
-            compilation_summary["specs_compiled"].append(task)
-            compilation_summary["total_actions_generated"] += len(actions_output)
+            compilation_summary["SpecsCompiled"].append(task)
+            compilation_summary["TotalActionsGenerated"] += len(actions_output)
 
         log.status(
             COMPILE_COMPLETE,
@@ -120,35 +113,31 @@ def handler(event: dict, context: Any | None) -> dict:
         log.debug("Returning compilation summary", details=compilation_summary)
 
         return {
-            TR_RESPONSE: {
-                TP_DEPLOYMENT_DETAILS: deployment_details.model_dump(),
-                "compilation_summary": compilation_summary,
-                "task_payload": {
-                    "tasks": [tp.task for tp in task_payloads],
-                    "environment": task_payload.deployment_details.environment,
+            "Response": {
+                "DeploymentDetails": deployment_details.model_dump(),
+                "CompilationSummary": compilation_summary,
+                "TaskPayload": {
+                    "Tasks": [tp.task for tp in task_payloads],
+                    "Environment": task_payload.deployment_details.environment,
                 },
-                "status": "COMPILE_COMPLETE",
-                "message": f"Successfully compiled {len(compilation_summary['specs_compiled'])} deployspec(s)",
+                "Status": "COMPILE_COMPLETE",
+                "Message": f"Successfully compiled {len(compilation_summary['specs_compiled'])} deployspec(s)",
             }
         }
 
     except Exception as e:
         # Enhanced error handling with context
         error_details = {
-            "error_type": type(e).__name__,
-            "error_message": str(e),
-            "compilation_status": "failed",
+            "ErrorType": type(e).__name__,
+            "ErrorMessage": str(e),
+            "CompilationStatus": "failed",
         }
 
         # Add context if available
         try:
             if "compilation_summary" in locals():
-                error_details["specs_compiled_before_failure"] = compilation_summary[
-                    "specs_compiled"
-                ]
-        except (
-            Exception
-        ) as context_error:  # Fixed: catch specific exception instead of bare except
+                error_details["SpecsCompiledBeforeFailure"] = compilation_summary["SpecsCompiled"]
+        except Exception as context_error:  # Fixed: catch specific exception instead of bare except
             log.warning(f"Failed to add error context: {str(context_error)}")
 
         log.status(
@@ -158,9 +147,9 @@ def handler(event: dict, context: Any | None) -> dict:
         )
 
         return {
-            TR_RESPONSE: {
-                "status": "COMPILE_FAILED",
-                "error": error_details,
-                "message": f"Deployspec compilation failed: {str(e)}",
+            "Response": {
+                "Status": "COMPILE_FAILED",
+                "Error": error_details,
+                "Message": f"Deployspec compilation failed: {str(e)}",
             }
         }

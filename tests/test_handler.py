@@ -175,23 +175,23 @@ def test_deployspec_handler_compilation_and_execution(
         response = result["Response"]
 
         # Test compilation summary
-        assert "compilation_summary" in response, "Response should contain compilation summary"
-        compilation_summary = response["compilation_summary"]
+        assert "CompilationSummary" in response, "Response should contain compilation summary"
+        compilation_summary = response["CompilationSummary"]
 
-        assert "specs_compiled" in compilation_summary
-        assert "total_actions_generated" in compilation_summary
-        assert len(compilation_summary["specs_compiled"]) > 0, "Should have compiled at least one spec"
+        assert "SpecsCompiled" in compilation_summary
+        assert "TotalActionsGenerated" in compilation_summary
+        assert len(compilation_summary["SpecsCompiled"]) > 0, "Should have compiled at least one spec"
 
         # Test execution results
-        assert "execution_results" in response, "Response should contain execution results"
-        execution_results = response["execution_results"]
+        assert "ExecutionResults" in response, "Response should contain execution results"
+        execution_results = response["ExecutionResults"]
 
         assert isinstance(execution_results, list), "Execution results should be a list"
         assert len(execution_results) > 0, "Should have execution results"
 
         # Test task payload creation
-        assert "task_payloads_created" in response, "Response should contain created task payloads"
-        task_payloads_created = response["task_payloads_created"]
+        assert "TaskPayloadsCreated" in response, "Response should contain created task payloads"
+        task_payloads_created = response["TaskPayloadsCreated"]
 
         assert isinstance(task_payloads_created, list), "Task payloads should be a list"
         assert len(task_payloads_created) > 0, "Should have created task payloads"
@@ -205,7 +205,7 @@ def test_deployspec_handler_compilation_and_execution(
 
         # Test status
         assert "status" in response, "Response should contain status"
-        status = response["status"]
+        status = response["Status"]
         assert status in [
             "EXECUTION_COMPLETE",
             "EXECUTION_FAILED",

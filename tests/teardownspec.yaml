@@ -2,7 +2,7 @@
   type: aws.delete_user
   params:
     user_name: bob
-    account: 123456789012
+    account: '123456789012'
     region: us-east-1
 - label: test1-delete-stack
   type: delete_stack
@@ -11,16 +11,17 @@
     stack_parameters:
       build: 12345
     accounts:
-      - 123456789012
+      - '123456789012'
     regions:
       - us-east-1
 - label: test1-delete-change-set
   type: delete_change_set
   params:
     stack_name: my-first-stack
+    change_set_name: my-first-change-set
     stack_parameters:
       build: 12345
     accounts:
-      - 123456789012
+      - '123456789012'
     regions:
       - us-east-1

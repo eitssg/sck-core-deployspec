@@ -5,6 +5,7 @@ This module provides functions to bootstrap DynamoDB tables and create test data
 for clients, portfolios, zones, and applications needed for deployspec testing.
 """
 
+import pytest
 from typing import Any
 
 import core_logging as log
@@ -25,6 +26,22 @@ from core_db.registry.zone import (
     SecurityAliasFacts,
     ProxyFacts,
 )
+
+
+@pytest.fixture(scope="module")
+def real_aws() -> bool:
+    """
+    Fixture to determine if the tests are running against a real AWS environment.
+
+    :returns: True if running against real AWS, False otherwise
+    :rtype: bool
+
+    Examples
+    --------
+    >>> is_real_aws = real_aws()
+    >>> assert is_real_aws == True  # or False depending on the environment
+    """
+    return False
 
 
 def bootstrap_dynamo() -> bool:
@@ -90,7 +107,7 @@ def bootstrap_dynamo() -> bool:
     return True
 
 
-def get_organization() -> dict[str, str]:
+def get_organization(real_aws: bool) -> dict[str, str]:
     """
     Return organization information for the AWS Profile.
 
@@ -105,26 +122,32 @@ def get_organization() -> dict[str, str]:
     >>> org_info = get_organization()
     >>> # Returns: {"id": "o-1234567890", "account_id": "123456789012", ...}
     """
-    organization: dict[str, str] = {"id": "", "account_id": "", "name": "", "email": ""}
+    organization: dict[str, str] = {
+        "id": "o-t73gu32ai5",
+        "account_id": "154798051514",
+        "name": "eits-billing",
+        "email": "jbarwick@eits.com.sg",
+    }
 
-    try:
-        oc = aws.org_client()
-        orginfo = oc.describe_organization()
-        org = orginfo.get("Organization", {})
-        organization.update(
-            {
-                "id": org.get("Id", ""),
-                "account_id": org.get("MasterAccountId", ""),
-                "email": org.get("MasterAccountEmail", ""),
-            }
-        )
+    if real_aws:
+        try:
+            oc = aws.org_client()
+            orginfo = oc.describe_organization()
+            org = orginfo.get("Organization", {})
+            organization.update(
+                {
+                    "id": org.get("Id", ""),
+                    "account_id": org.get("MasterAccountId", ""),
+                    "email": org.get("MasterAccountEmail", ""),
+                }
+            )
 
-        if organization["account_id"]:
-            response = oc.describe_account(AccountId=organization["account_id"])
-            organization["name"] = response.get("Account", {}).get("Name", "")
+            if organization["account_id"]:
+                response = oc.describe_account(AccountId=organization["account_id"])
+                organization["name"] = response.get("Account", {}).get("Name", "")
 
-    except Exception:  # pylint: disable=broad-except
-        pass
+        except Exception:  # pylint: disable=broad-except
+            pass
 
     return organization
 
@@ -156,7 +179,8 @@ def get_client_data(organization: dict[str, str], arguments: dict[str, Any]) -> 
 
     aws_account_id = organization["account_id"]
 
-    cf = ClientFacts(
+    model = ClientFactsFactory.get_model()
+    cf = model(
         client=client,
         domain="my-domain.com",
         organization_id=organization["id"],
@@ -204,7 +228,8 @@ def get_portfolio_data(client_data: ClientFacts, arguments: dict[str, Any]) -> P
     domain_name = client_data.Domain  # Fixed: use lowercase
     client = client_data.Client  # Fixed: use lowercase
 
-    portfolio = PortfolioFacts(
+    model = PortfolioFactsFactory.get_model(client)
+    portfolio = model(
         client=client,  # Fixed: use lowercase field names
         portfolio=portfolio_name,  # Fixed: use lowercase field names
         contacts=[ContactFacts(name="John Doe", email="john.doe@example.com")],  # Fixed: email domain
@@ -252,8 +277,10 @@ def get_zone_data(client_data: ClientFacts, arguments: dict[str, Any]) -> ZoneFa
     # Fixed: Use lowercase attribute access
     automation_account_id = client_data.AutomationAccount
     automation_account_name = client_data.OrganizationAccount
+    client = client_data.Client  # Fixed: use lowercase field names
 
-    zone = ZoneFacts(
+    model = ZoneFactsFactory.get_model(client)
+    zone = model(
         client=client_data.Client,  # Fixed: use lowercase field names
         zone="my-automation-service-zone",
         account_facts=AccountFacts(  # Fixed: use lowercase field names
@@ -354,8 +381,9 @@ def get_app_data(portfolio_data: PortfolioFacts, zone_data: ZoneFacts, arguments
 
     client_portfolio_key = f"{client}:{portfolio}"
 
-    app_facts = AppFacts(  # Fixed: variable name conflict
-        client_portfolio=client_portfolio_key,  # Fixed: use lowercase field names
+    model = AppFactsFactory.get_model(client)
+    app_facts = model(
+        client_portfolio=client_portfolio_key,
         app_regex=f"^prn:{portfolio}:{app}:.*:.*$",
         zone=zone_data.Zone,
         name="test application",
@@ -394,7 +422,7 @@ def initialize(
     if not bootstrap_dynamo():
         raise Exception("Failed to bootstrap DynamoDB")
 
-    org_data = get_organization()
+    org_data = get_organization(False)
 
     client_data: ClientFacts = get_client_data(org_data, arguments)
     zone_data: ZoneFacts = get_zone_data(client_data, arguments)

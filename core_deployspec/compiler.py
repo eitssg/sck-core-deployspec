@@ -11,15 +11,15 @@ import io
 import os
 import re
 import zipfile as zip
-import json
+import tempfile
+
 import core_logging as log
 
 import core_framework as util
 from copy import deepcopy
 
 from core_execute.actionlib.factory import ActionFactory
-
-from jinja2 import Template
+from core_renderer import Jinja2Renderer
 
 from core_framework.constants import (
     SCOPE_PORTFOLIO,
@@ -53,23 +53,144 @@ from core_db.facter import get_facts
 
 from core_framework.models import ActionSpec, TaskPayload, DeploySpec, ActionSpec, DeploymentDetails
 
-from core_helper.magic import MagicS3Client
+from core_helper.magic import MagicS3Client, SeekableStreamWrapper
 
 
 SpecLabelMapType = dict[str, list[str]]
 
 CONTEXT_ROOT = "core"
 
+spec_mapping = {
+    V_DEPLOYSPEC_FILE_YAML: (util.read_yaml, TASK_DEPLOY),
+    V_DEPLOYSPEC_FILE_JSON: (util.read_json, TASK_DEPLOY),
+    V_PLANSPEC_FILE_YAML: (util.read_yaml, TASK_PLAN),
+    V_PLANSPEC_FILE_JSON: (util.read_json, TASK_PLAN),
+    V_APPLYSPEC_FILE_YAML: (util.read_yaml, TASK_APPLY),
+    V_APPLYSPEC_FILE_JSON: (util.read_json, TASK_APPLY),
+    V_TEARDOWNSPEC_FILE_YAML: (util.read_yaml, TASK_TEARDOWN),
+    V_TEARDOWNSPEC_FILE_JSON: (util.read_json, TASK_TEARDOWN),
+}
+
 
 def load_deployspec(task_payload: TaskPayload) -> dict[str, DeploySpec]:
+
+    try:
+
+        package_key = task_payload.package.key
+        if not package_key:
+            raise ValueError("Package key is required to load deployspec")
+
+        if package_key.lower().endswith(".zip"):
+            return __load_deployspec_zip(task_payload)
+        else:
+            return __load_deployspec_file(task_payload)
+
+    except Exception as e:
+        log.error("Error loading deployspec: {}", str(e))
+        return None
+
+
+def __load_deployspec_file(task_payload: TaskPayload) -> dict[str, DeploySpec]:
     """
-    Process package for local mode.
+    Process package for single file.
+
+    Package details will contain the location of the deployspec file.
+    This routine will read the file and process it.
+
+    It will return the deployment specifications as an index of tasks.
+
+    :param task_payload: The task payload containing package and deployment details
+    :type task_payload: TaskPayload
+    :returns: Dictionary of deployment specifications keyed by task type
+    :rtype: dict[str, DeploySpec]
+    :raises ValueError: If package key is required but not provided
+
+    Examples
+    --------
+    >>> task_payload = TaskPayload(
+    ...     package=PackageDetails(
+    ...         bucket_name="my-bucket",
+    ...         bucket_region="us-east-1",
+    ...         key="deployments/package.zip"
+    ...     )
+    ... )
+    >>> specs = load_deployspec(task_payload)
+    >>> # Returns: {"deploy": DeploySpec(...), "plan": DeploySpec(...)}
+    """
+    package_key = task_payload.package.key
+
+    if package_key.lower().endswith(".yaml") or package_key.lower().endswith(".yml"):
+        mimetype = "application/yaml"
+
+    elif package_key.lower().endswith(".json"):
+        mimetype = "application/json"
+
+    else:
+        raise ValueError(f"Unsupported deployspec file type: {package_key}")
+
+    # Download the artefactss from the Package store
+
+    region = task_payload.package.bucket_region
+    bucket_name = task_payload.package.bucket_name
+
+    # Get the storage location and download the single file
+    bucket = MagicS3Client.get_bucket(Region=region, BucketName=bucket_name)
+
+    # If there is a package.zip file in this folder, we can process it.
+    fileobj = io.BytesIO()
+    bucket.download_fileobj(Key=package_key, Fileobj=fileobj)
+
+    # Reset Buffer Position
+    fileobj.seek(0)  # Reset the pointer to the beginning so we can begin processing the zip
+
+    specs: dict[str, DeploySpec] = {}
+
+    # if the process_func failes with an error, we should log it and return an empty specs dict
+
+    name = os.path.basename(package_key)
+    if name in spec_mapping:
+        log.info("Loading spec name={}", name)
+        process_func, task = spec_mapping[name]
+        data = process_func(fileobj)
+        specs[task] = DeploySpec(actions=data)
+    else:
+        data = fileobj.read()
+
+    # Upload the files to the artifacts store
+
+    region = task_payload.actions.bucket_region
+    bucket_name = task_payload.actions.bucket_name
+
+    # Get the storage location and download the single file
+    bucket = MagicS3Client.get_bucket(Region=region, BucketName=bucket_name)
+
+    key = task_payload.deployment_details.get_artefacts_key(name)
+
+    log.info("Uploading file: {})", key)
+
+    if mimetype == "application/yaml":
+        data = util.to_yaml(data)
+    elif mimetype == "application/json":
+        data = util.to_json(data)
+
+    bucket.put_object(Key=key, Body=data, ServerSideEncryption="AES256")
+
+    # Process deployspec
+    if not specs:
+        raise Exception("Package does not contain any deployspec files, cannot continue")
+
+    return specs
+
+
+def __load_deployspec_zip(task_payload: TaskPayload) -> dict[str, DeploySpec]:
+    """
+    Process package for zip file.
 
     Package details will contain the location of the package.zip file.
     This routine will extract the package.zip file and process the contents.
     If it finds a deployspec.yaml file, it will process that.
 
-    It will mutate package_details to include the DeploySpec object.
+    It will return the actions generated as an index of tasks.
 
     :param task_payload: The task payload containing package and deployment details
     :type task_payload: TaskPayload
@@ -104,40 +225,40 @@ def load_deployspec(task_payload: TaskPayload) -> dict[str, DeploySpec]:
     # Get the storage location
     bucket = MagicS3Client.get_bucket(Region=region, BucketName=bucket_name)
 
-    # If there is a package.zip file in this folder, we can process it.
-    zip_fileobj = io.BytesIO()
-    bucket.download_fileobj(Key=package_key, Fileobj=zip_fileobj)
+    # If there is a package.zip file in this folder, we can process it. Use get_object to open a stream.
+    with tempfile.NamedTemporaryFile() as temp_file:
+        try:
+            bucket.download_fileobj(Key=package_key, Fileobj=temp_file)
 
-    # Reset Buffer Position
-    zip_fileobj.seek(0)  # Reset the pointer to the beginning so we can begin processing the zip
+            temp_file.seek(0)
 
-    # We have read the entire zip file into memory.  I hope it's not too big!!
-    # Process the zip file and extract the deployspec file.
-    spec = process_package_zip(task_payload, zip_fileobj)
+            spec = __process_package_zip(task_payload, temp_file)
 
-    # Mutate package_details to include the DeploySpec
+        except Exception as e:
+            log.error("Error processing package {}: {}", package_key, str(e))
+            raise ValueError(f"Error processing package {package_key}: {str(e)}")
 
     return spec
 
 
-def process_package_zip(task_payload: TaskPayload, zip_fileobj: io.BytesIO) -> dict[str, DeploySpec]:
+def __process_package_zip(task_payload: TaskPayload, temp_file: tempfile.NamedTemporaryFile) -> dict[str, DeploySpec]:
     """
     Process the zip package copying content to the artifacts store while extracting the actions
     into a DeploySpec object. (plan, apply, deploy, or teardown)
 
     :param task_payload: The task payload containing deployment details
     :type task_payload: TaskPayload
-    :param zip_fileobj: IO stream of the zip file
-    :type zip_fileobj: io.BytesIO
+    :param temp_file: Temporary file containing the zip data (seekable file object)
+    :type temp_file: tempfile.NamedTemporaryFile
     :returns: Dictionary of deployment specifications keyed by task type
     :rtype: dict[str, DeploySpec]
     :raises Exception: If the package does not contain a deployspec file or is malformed
 
     Examples
     --------
-    >>> import io
-    >>> zip_data = io.BytesIO(zip_content)
-    >>> specs = process_package_zip(task_payload, zip_data)
+    >>> with tempfile.NamedTemporaryFile() as temp_file:
+    ...     # temp_file contains zip data downloaded from S3
+    ...     specs = process_package_zip(task_payload, temp_file)
     >>> # Returns: {"deploy": DeploySpec(...), "teardown": DeploySpec(...)}
     """
 
@@ -153,44 +274,55 @@ def process_package_zip(task_payload: TaskPayload, zip_fileobj: io.BytesIO) -> d
     # This will be returned and added to the task_payload packages
     specs: dict[str, DeploySpec] = {}
 
-    zipfile_obj = zip.ZipFile(zip_fileobj, "r")
-
     log.debug("Extracting {} and Uploading artifact to: {}", V_PACKAGE_ZIP, upload_prefix)
 
     bucket = MagicS3Client.get_bucket(Region=bucket_region, BucketName=bucket_name)
 
-    spec_mapping = {
-        V_DEPLOYSPEC_FILE_YAML: (util.from_yaml, TASK_DEPLOY),
-        V_DEPLOYSPEC_FILE_JSON: (util.from_json, TASK_DEPLOY),
-        V_PLANSPEC_FILE_YAML: (util.from_yaml, TASK_PLAN),
-        V_PLANSPEC_FILE_JSON: (util.from_json, TASK_PLAN),
-        V_APPLYSPEC_FILE_YAML: (util.from_yaml, TASK_APPLY),
-        V_APPLYSPEC_FILE_JSON: (util.from_json, TASK_APPLY),
-        V_TEARDOWNSPEC_FILE_YAML: (util.from_yaml, TASK_TEARDOWN),
-        V_TEARDOWNSPEC_FILE_JSON: (util.from_json, TASK_TEARDOWN),
-    }
+    with zip.ZipFile(temp_file, "r") as zipfile_obj:
 
-    for name in zipfile_obj.namelist():
+        for name in zipfile_obj.namelist():
 
-        # as we iterate through the files, look for the spec we are interested in
-        # compiling.  This will be the deployspec, planspec, applyspec, or teardownspec
-        # file.  We will also upload all files to the artifacts store for documentation purposes.
-        # and return the spec for further processing.
-        if name in spec_mapping:
-            log.info("Loading spec name={}", name)
-            process_func, task = spec_mapping[name]
-            data = process_func(zipfile_obj.read(name))
-            specs[task] = DeploySpec(actions=data)
+            # as we iterate through the files, look for the spec we are interested in
+            # compiling.  This will be the deployspec, planspec, applyspec, or teardownspec
+            # file.  We will also upload all files to the artifacts store for documentation purposes.
+            # and return the spec for further processing.
+            if name in spec_mapping:
 
-        # Upload all files to the artifacts store for documentation purposes
-        # and this includes the CloudFormation templates needed for the actions.
+                log.info("Loading spec name={}", name)
+                process_func, task = spec_mapping[name]
 
-        key = dd.get_artefacts_key(name)
-        data = zipfile_obj.read(name)
+                with zipfile_obj.open(name) as file_in_zip:
+                    # Read the file from the zip stream and convert it to a dictionary
+                    # the procewss_func will be one of util.read_yaml or util.read_json
+                    data = process_func(file_in_zip)
 
-        log.info("Uploading file: {})", key)
+                # Group the actions by the "task" type (the task type is derrived from the file name)
+                specs[task] = DeploySpec(actions=data)
 
-        bucket.put_object(Key=key, Body=data, ServerSideEncryption="AES256")
+                # Upload the processed data
+                key = dd.get_artefacts_key(name)
+                log.info("Uploading processed file: {}", key)
+
+                # We reprocess the data dictionary into a string format for upload to the artefacts store
+                if name.endswith((".yaml", ".yml")):
+                    upload_data = util.to_yaml(data)
+                elif name.endswith(".json"):
+                    upload_data = util.to_json(data)
+                else:
+                    upload_data = util.to_yaml(data)  # Default to YAML (*.actions files)
+
+                bucket.put_object(Key=key, Body=upload_data, ServerSideEncryption="AES256")
+
+            else:
+                data = zipfile_obj.read(name)
+
+                # Upload all files to the artifacts store for documentation purposes
+                # and this includes the CloudFormation templates needed for the actions.
+
+                key = dd.get_artefacts_key(name)
+                log.info("Uploading file: {})", key)
+
+                bucket.put_object(Key=key, Body=data, ServerSideEncryption="AES256")
 
     # Process deployspec
     if not specs:
@@ -283,14 +415,14 @@ def __get_action_name(action_spec: ActionSpec, account: str, region: str) -> str
     return f"{action_spec.label}-{account}-{region}"
 
 
-def compile_deployspec(task_payload: TaskPayload, deployspec: DeploySpec) -> list[ActionSpec]:
+def compile_deployspec(task_payload: TaskPayload, deployspec: DeploySpec | None = None) -> list[ActionSpec]:
     """
     Convert deployspec into an actions list.
 
     :param task_payload: The task payload containing deployment context
     :type task_payload: TaskPayload
-    :param deployspec: The deployspec to compile into actions
-    :type deployspec: DeploySpec
+    :param deployspec: The deployspec to compile into actions.  If None, it will use the deployspec from the task payload package.
+    :type deployspec: DeploySpec | None
     :returns: List of compiled action specifications
     :rtype: list[ActionSpec]
     :raises ValueError: If unknown action type is encountered
@@ -302,7 +434,17 @@ def compile_deployspec(task_payload: TaskPayload, deployspec: DeploySpec) -> lis
     ... ])
     >>> actions = compile_deployspec(task_payload, deployspec)
     >>> # Returns: [ActionSpec(...)]
+
+    >>> task_payload = TaskPayload(..., package=PackageDetails(..., deployspec=deployspec))
+    >>> actions = compile_deployspec(task_payload)
+    >>> # Returns: [ActionSpec(...)]
     """
+    if deployspec is None:
+        deployspec = task_payload.package.deployspec
+
+    if deployspec is None:
+        raise ValueError("Deployspec is required to compile actions")
+
     spec_label_map = get_spec_label_map(deployspec.actions)
 
     log.debug("spec_label_map", details=spec_label_map)
@@ -463,8 +605,8 @@ def __get_action_template_url(
     Examples
     --------
     >>> action_spec = ActionSpec(params={"template_url": "vpc.yaml"})
-    >>> url = get_action_template_url(action_spec, "my-bucket", "us-east-1", deployment_details)
-    >>> # Returns: "s3://my-bucket/artifacts/vpc.yaml"
+    >>> url = __get_action_template_url(action_spec, "my-bucket", "us-east-1", deployment_details)
+    >>> # Returns: "s3://my-bucket/artifacts/portfolio/app/branch/build/vpc.yaml"
     """
 
     key = __getany(action_spec.params, ["template_url", "TemplateUrl", "template", "Template"])
@@ -500,13 +642,15 @@ def __get_template_url(
 
     Examples
     --------
-    >>> url = get_template_url("my-bucket", "us-east-1", deployment_details,
-    ...                       "vpc.yaml", "build")
-    >>> # Returns: "s3://my-bucket/artifacts/client/portfolio/app/branch/build/vpc.yaml"
+    >>> url = __get_template_url("my-bucket", "us-east-1", deployment_details,
+    ...                        "vpc.yaml", "build")
+    >>> # Returns: "s3://my-bucket/artifacts/portfolio/app/branch/build/vpc.yaml"
     """
 
     if not template:
         template = ""
+
+    template = os.path.basename(template)
 
     store = util.get_storage_volume(bucket_region)
 
@@ -564,31 +708,104 @@ def apply_context(actions: list[ActionSpec], context: dict) -> list[ActionSpec]:
 
     actions_list: list[dict[str, Any]] = [a.model_dump() for a in actions]
 
-    unrendered_contents = util.to_yaml(actions_list)
+    try:
+        unrendered_contents = util.to_yaml(actions_list)
 
-    # Create a Jinja2 template from the deployspec contents
-    template = Template(unrendered_contents)
+        renderer = Jinja2Renderer()
 
-    # Render the template with the provided state.  I don't know
-    # if the root should be "core" or if the root should be "context".
-    # If we change the root to "context", then we need to change the
-    # input to template.render(context=context[CONTEXT_ROOT])
-    rendered_contents = template.render(core=context[CONTEXT_ROOT])
+        # Render the template with the provided state.  I don't know
+        # if the root should be "core" or if the root should be "context".
+        # If we change the root to "context", then we need to change the
+        # input to template.render(context=context[CONTEXT_ROOT])
+        rendered_contents = renderer.render_string(unrendered_contents, context[CONTEXT_ROOT])
 
-    action_list = util.from_yaml(rendered_contents)
+        action_list = util.from_yaml(rendered_contents)
 
-    # Convert the action list to ActionSpec objects
-    # Please note that the value of action.kind and action.params is NOT validated here.
-    actions: list[ActionSpec] = []
-    for action in action_list:
-        if isinstance(action, dict):
-            actions.append(ActionSpec(**action))
-        elif isinstance(action, ActionSpec):
-            actions.append(action)
-        else:
-            raise ValueError(f"Unknown action type {type(action)} in actions list")
+        # Convert the action list back to ActionSpec objects
+        # Please note that the value of action.kind and action.params is NOT validated here.
+        actions: list[ActionSpec] = []
+        for action in action_list:
+            if isinstance(action, dict):
+                actions.append(ActionSpec(**action))
+            elif isinstance(action, ActionSpec):
+                actions.append(action)
+            else:
+                raise ValueError(f"Unknown action type {type(action)} in actions list")
 
-    log.debug("Compiled actions: {}", actions)
+        log.debug("Compiled actions: {}", actions)
+
+    except Exception as e:
+        # Enhanced error logging for Jinja2 errors
+        error_details = {
+            "error_type": type(e).__name__,
+            "error_message": str(e),
+            "context_keys": list(context.keys()) if context else [],
+        }
+
+        # Add Jinja2-specific error details
+        import jinja2
+
+        if isinstance(e, jinja2.TemplateError):
+            error_details.update(
+                {
+                    "jinja2_error_type": type(e).__name__,
+                    "template_name": getattr(e, "name", "unknown"),
+                    "line_number": getattr(e, "lineno", "unknown"),
+                    "template_error": True,
+                }
+            )
+
+            # Log template syntax errors with more detail
+            if isinstance(e, jinja2.TemplateSyntaxError):
+                error_details.update(
+                    {"syntax_error": True, "error_location": f"line {e.lineno}" if e.lineno else "unknown location"}
+                )
+                log.error("Jinja2 Template Syntax Error at {}: {}", error_details["error_location"], e.message)
+
+            # Log undefined variable errors
+            elif isinstance(e, jinja2.UndefinedError):
+                error_details.update({"undefined_error": True, "undefined_variable": str(e)})
+                log.error("Jinja2 Undefined Variable Error: {}", str(e))
+
+            # Log template runtime errors
+            elif isinstance(e, jinja2.TemplateRuntimeError):
+                error_details.update({"runtime_error": True})
+                log.error("Jinja2 Template Runtime Error: {}", str(e))
+
+            # Log template assertion errors
+            elif isinstance(e, jinja2.TemplateAssertionError):
+                error_details.update({"assertion_error": True})
+                log.error("Jinja2 Template Assertion Error: {}", str(e))
+
+            # Log security errors
+            elif isinstance(e, jinja2.SecurityError):
+                error_details.update({"security_error": True})
+                log.error("Jinja2 Security Error: {}", str(e))
+
+            else:
+                log.error("Jinja2 Template Error ({}): {}", type(e).__name__, str(e))
+
+        # Log the template content for debugging (truncated if too long)
+        try:
+            template_preview = unrendered_contents[:500] + "..." if len(unrendered_contents) > 500 else unrendered_contents
+            error_details["template_preview"] = template_preview
+            log.debug("Template content preview: {}", template_preview)
+        except:
+            log.debug("Could not log template content preview")
+
+        # Log available context for debugging
+        if context and CONTEXT_ROOT in context:
+            context_preview = (
+                str(context[CONTEXT_ROOT])[:300] + "..." if len(str(context[CONTEXT_ROOT])) > 300 else str(context[CONTEXT_ROOT])
+            )
+            error_details["context_preview"] = context_preview
+            log.debug("Context preview: {}", context_preview)
+
+        # Log comprehensive error details
+        log.error("Error applying context to actions", details=error_details)
+
+        # Re-raise with enhanced error message
+        raise ValueError(f"Error applying context to actions: {str(e)}")
 
     # Return the rendered actions list
     return actions
@@ -602,16 +819,15 @@ def __get_tags(scope: str | None, deployment_details: DeploymentDetails, user_ta
     :type scope: str | None
     :param deployment_details: The deployment details containing tag information
     :type deployment_details: DeploymentDetails
-    :param user_tags: Tags that will override deployment_details tags and add to the action tags
+    :param user_tags: User-provided tags that override deployment_details tags
     :type user_tags: dict[str, str] | None
     :returns: Dictionary of AWS tags or None if no tags
     :rtype: dict | None
 
-
     Examples
     --------
-    >>> tags = __get_tags("build", deployment_details)
-    >>> # Returns: {"Portfolio": "core", "App": "api", "Branch": "master", "Build": "1234"}
+    >>> tags = __get_tags("build", deployment_details, {"Environment": "prod"})
+    >>> # Returns: {"Portfolio": "core", "App": "api", "Branch": "master", "Build": "1234", "Environment": "prod"}
     """
     tags: dict[str, str] = deployment_details.tags or {}
 
@@ -661,8 +877,8 @@ def __apply_syntax_update(stack_parameters: dict | None) -> dict | None:
     for key in stack_parameters:
         stack_parameters[key] = re.sub(
             r"{{ (?!core.)([^.]*)\.(.*) }}",
-            r"{{ '\1/\2' | lookup }}",
-            "{}".format(stack_parameters[key]),  # Must be a string for re.sub to work, so fails when your parameter is a number.
+            r'{{ "\1/\2" | lookup }}',
+            str(stack_parameters[key]),
         )
     return stack_parameters
 

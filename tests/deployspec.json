@@ -1,0 +1,57 @@
+[
+  {
+    "label": "test1-create-user",
+    "type": "aws.create_user",
+    "params": {
+      "user_name": "bob",
+      "accounts": ["123456789012", "123456789013", "123456789014"],
+      "regions": ["us-east-1", "us-west-2"]
+    },
+    "depends_on": []
+  },
+  {
+    "label": "test1-delete-user",
+    "type": "aws.delete_user",
+    "params": {
+      "user_name": "bob",
+      "accounts": ["123456789012", "123456789013", "123456789014"],
+      "regions": ["us-east-1", "us-west-2"]
+    },
+    "depends_on": "test1-create-user"
+  },
+  {
+    "label": "test1-create-stack",
+    "type": "create_stack",
+    "params": {
+      "stack_name": "{{ portfolio }}-stack-{{ app }}-{{ build }}",
+      "template": "template.yaml",
+      "stack_parameters": {
+        "build": 12345,
+        "BucketName": "{{ portfolio.name }}"
+      },
+      "accounts": [
+        "123456789012",
+        "123456789013",
+        "123456789014"
+      ],
+      "regions": [
+        "us-east-1",
+        "us-west-2"
+      ],
+      "tags": {
+        "Depatment": "unique",
+        "Name": "central"
+      },
+      "stack_policy": {
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": "*",
+            "Action": "*"
+          }
+        ]
+      }
+    },
+    "depends_on": []
+  }
+]

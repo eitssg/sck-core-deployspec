@@ -2,7 +2,8 @@
   type: apply_change_set
   params:
     stack_name: my-first-stack
+    change_set_name: my-first-stack-changeset
     accounts:
-      - 123456789012
+      - '123456789012'
     regions:
       - us-east-1
