@@ -21,6 +21,7 @@
       build: 12345
       BucketName: "{{ ArtefactsBucketName }}"
       Portfolio: "{{ Portfolio }}"
+      OtherParam: "{{ portfolio.name }}"
     accounts:
       - "123456789012"
       - "123456789013"

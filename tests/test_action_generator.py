@@ -107,4 +107,4 @@ def test_generatge_create_stack(task_payload, deployspec: DeploySpec):
     )
 
     # Did the translation work?
-    assert params["StackParameters"]["BucketName"] == "{{ 'portfolio/name' | lookup }}"
+    assert params["StackParameters"]["OtherParam"] == '{{ "portfolio/name" | lookup }}'

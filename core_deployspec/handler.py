@@ -7,10 +7,12 @@ compiled actions through the core_execute module.
 """
 
 from typing import Any
+import traceback
 
 import core_logging as log
 
 from core_framework.status import COMPILE_FAILED, COMPILE_COMPLETE, COMPILE_IN_PROGRESS
+from pydantic import ValidationError
 
 from .compiler import (
     apply_context,
@@ -81,7 +83,7 @@ def handler(event: dict, context: Any | None) -> dict:
 
             # Create a new task-specific payload by copying the original
             task_specific_payload = TaskPayload(**task_payload.model_dump())
-            task_specific_payload.task = task
+            task_specific_payload.set_task(task)
             task_payloads.append(task_specific_payload)  # Fixed: append the task_specific_payload
 
             log.debug(f"Processing task: {task}", details=spec.model_dump())
@@ -121,35 +123,58 @@ def handler(event: dict, context: Any | None) -> dict:
                     "Environment": task_payload.deployment_details.environment,
                 },
                 "Status": "COMPILE_COMPLETE",
-                "Message": f"Successfully compiled {len(compilation_summary['specs_compiled'])} deployspec(s)",
+                "Message": f"Successfully compiled {len(compilation_summary['SpecsCompiled'])} deployspec(s)",
             }
         }
 
     except Exception as e:
-        # Enhanced error handling with context
-        error_details = {
-            "ErrorType": type(e).__name__,
-            "ErrorMessage": str(e),
-            "CompilationStatus": "failed",
-        }
+        # Enhanced error handling with full traceback
 
-        # Add context if available
+        validation_errors = []
+
+        if isinstance(e, ValidationError):
+
+            message = f"Deployspec compilation failed ({type(e).__name__}): {e.title}"
+
+            # Add detailed validation info
+            for error in e.errors():
+                validation_errors.append(
+                    {
+                        "Field": " → ".join(str(loc) for loc in error.get("loc", [])),
+                        "Message": error.get("msg", ""),
+                        "Type": error.get("type", ""),
+                        "Input": error.get("input", "N/A"),
+                    }
+                )
+
+        else:
+            message = f"Deployspec compilation failed ({type(e).__name__}): {str(e)}"
+
+        error_details = {"ErrorMessage": message, "CompilationStatus": "failed"}
+
         try:
+            if validation_errors:
+                error_details["ValidationErrors"] = validation_errors
             if "compilation_summary" in locals():
                 error_details["SpecsCompiledBeforeFailure"] = compilation_summary["SpecsCompiled"]
-        except Exception as context_error:  # Fixed: catch specific exception instead of bare except
+            if "task" in locals():
+                error_details["FailedTask"] = task
+            if "task_payload" in locals():
+                error_details["TaskPayload"] = task_payload.model_dump()
+
+        except Exception as context_error:
             log.warning(f"Failed to add error context: {str(context_error)}")
 
-        log.status(
-            COMPILE_FAILED,
-            "Deployspec compilation failed",
-            details=error_details,
-        )
+        log.trace("Error traceback details", details={"FullTraceback": traceback.format_exc()})
+
+        log.error("Deployspec compilation failed", details=error_details)
+
+        log.status(COMPILE_FAILED, "Deployspec compilation failed")
 
         return {
             "Response": {
                 "Status": "COMPILE_FAILED",
-                "Error": error_details,
-                "Message": f"Deployspec compilation failed: {str(e)}",
+                "Message": message,
+                "ErrorDetails": error_details,
             }
         }
