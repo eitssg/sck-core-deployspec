@@ -88,22 +88,22 @@ def handler(event: dict, context: Any | None) -> dict:
 
             log.debug(f"Processing task: {task}", details=spec.model_dump())
 
+            # Apply the context and finalize output
+            spec.actions = apply_context(spec.actions, context_data)
+
             # Compile the deployspec into actions
             actions: list[ActionSpec] = compile_deployspec(task_specific_payload, spec)
 
             log.debug("Finalizing Templates. Jinja2 templating.")
 
-            # Apply the context and finalize output
-            actions_output: list[ActionSpec] = apply_context(actions, context_data)
-
-            save_actions(task_specific_payload, actions_output)
+            save_actions(task_specific_payload, actions)
 
             # Save state (progressive commits)
             save_state(task_specific_payload, context_data)
 
             # Update compilation summary
             compilation_summary["SpecsCompiled"].append(task)
-            compilation_summary["TotalActionsGenerated"] += len(actions_output)
+            compilation_summary["TotalActionsGenerated"] += len(actions)
 
         log.status(
             COMPILE_COMPLETE,

@@ -415,7 +415,7 @@ def __get_action_name(action_spec: ActionSpec, account: str, region: str) -> str
     return f"{action_spec.label}-{account}-{region}"
 
 
-def compile_deployspec(task_payload: TaskPayload, deployspec: DeploySpec | None = None) -> list[ActionSpec]:
+def compile_deployspec(task_payload: TaskPayload, deployspec: DeploySpec) -> list[ActionSpec]:
     """
     Convert deployspec into an actions list.
 
@@ -440,9 +440,6 @@ def compile_deployspec(task_payload: TaskPayload, deployspec: DeploySpec | None 
     >>> # Returns: [ActionSpec(...)]
     """
     if deployspec is None:
-        deployspec = task_payload.package.deployspec
-
-    if deployspec is None:
         raise ValueError("Deployspec is required to compile actions")
 
     spec_label_map = get_spec_label_map(deployspec.actions)
@@ -451,7 +448,7 @@ def compile_deployspec(task_payload: TaskPayload, deployspec: DeploySpec | None 
 
     # For the actions specified in the deployspec, compile them into a list of actions for the core_execute module
     compiled_actions: list[ActionSpec] = []
-    for action_spec in deployspec.action_specs:
+    for action_spec in deployspec.actions:
         if not ActionFactory.is_valid_action(action_spec.kind):
             raise ValueError(f"Unknown action type {action_spec.kind}")
         compiled_actions.extend(compile_action(action_spec, task_payload, spec_label_map))
@@ -466,12 +463,7 @@ def get_spec_label_map(actions: list[ActionSpec]) -> dict[str, list[str]]:
     return spec_label_map
 
 
-def compile_action(
-    action_spec: ActionSpec,
-    task_payload: TaskPayload,
-    spec_label_map: SpecLabelMapType,
-    **kwargs,
-) -> list[ActionSpec]:
+def compile_action(action_spec: ActionSpec, task_payload: TaskPayload, spec_label_map: SpecLabelMapType) -> list[ActionSpec]:
     """
     Compile a single action specification into executable actions.
 
@@ -481,8 +473,6 @@ def compile_action(
     :type task_payload: TaskPayload
     :param spec_label_map: Mapping of spec labels to region/account combinations
     :type spec_label_map: SpecLabelMapType
-    :param kwargs: Additional parameters including allow_multiple_stacks and kind
-    :type kwargs: dict
     :returns: List of compiled action specifications
     :rtype: list[ActionSpec]
     :raises ValueError: If required account/region information is missing or invalid
@@ -846,7 +836,8 @@ def __get_tags(scope: str | None, deployment_details: DeploymentDetails, user_ta
     if scope == SCOPE_BUILD and deployment_details.build:
         tags[TAG_BUILD] = deployment_details.build
 
-    tags.update(user_tags)
+    if isinstance(user_tags, dict):
+        tags.update(user_tags)
 
     return tags if len(tags) > 0 else None
 
