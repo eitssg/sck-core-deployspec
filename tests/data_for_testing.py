@@ -12,13 +12,18 @@ import core_logging as log
 import core_framework as util
 import core_helper.aws as aws
 
-from core_db.event import EventModelFactory
-from core_db.item import ItemModelFactory
-from core_db.registry.client import ClientFacts, ClientFactsFactory
-from core_db.registry.app import AppFacts, AppFactsFactory
-from core_db.registry.portfolio import PortfolioFacts, ContactFacts, ApproverFacts, ProjectFacts, OwnerFacts, PortfolioFactsFactory
+from core_db.registry.client import ClientFactsModel, ClientFactsFactory
+from core_db.registry.app import AppFactsModel, AppFactsFactory
+from core_db.registry.portfolio import (
+    PortfolioFactsModel,
+    ContactFacts,
+    ApproverFacts,
+    ProjectFacts,
+    OwnerFacts,
+    PortfolioFactsFactory,
+)
 from core_db.registry.zone import (
-    ZoneFacts,
+    ZoneFactsModel,
     ZoneFactsFactory,
     AccountFacts,
     RegionFacts,
@@ -27,84 +32,7 @@ from core_db.registry.zone import (
     ProxyFacts,
 )
 
-
-@pytest.fixture(scope="module")
-def real_aws() -> bool:
-    """
-    Fixture to determine if the tests are running against a real AWS environment.
-
-    :returns: True if running against real AWS, False otherwise
-    :rtype: bool
-
-    Examples
-    --------
-    >>> is_real_aws = real_aws()
-    >>> assert is_real_aws == True  # or False depending on the environment
-    """
-    return False
-
-
-def bootstrap_dynamo() -> bool:
-    """
-    Bootstrap DynamoDB tables for testing.
-
-    Creates all required DynamoDB tables if they don't exist.
-    Assumes local DynamoDB is running on localhost:8000.
-
-    :returns: True if bootstrap successful, raises assertion error otherwise
-    :rtype: bool
-    :raises AssertionError: If DynamoDB host is not localhost:8000 or table creation fails
-
-    Examples
-    --------
-    >>> success = bootstrap_dynamo()
-    >>> assert success == True
-    """
-    # see environment variables in .env
-    host = util.get_dynamodb_host()
-
-    assert host == "http://localhost:8000", "DYNAMODB_HOST must be set to http://localhost:8000"
-
-    try:
-        client_name = util.get_client_name()
-
-        # use boto3 to connect to DynamoDB, get a list of all tables, then delete all tables
-        import boto3
-
-        dynamodb = boto3.resource("dynamodb", endpoint_url=host)
-
-        tables = dynamodb.tables.all()
-        if tables:
-            # delete all tables
-            for table in tables:
-                log.debug(f"Deleting table: {table.name}")
-                table.delete()
-                table.wait_until_not_exists()
-                log.debug(f"Table {table.name} deleted successfully.")
-
-        ClientFacts = ClientFactsFactory.get_model(client_name)
-        ClientFacts.create_table(wait=True)
-
-        PortfolioFacts = PortfolioFactsFactory.get_model(client_name)
-        PortfolioFacts.create_table(wait=True)
-
-        AppFacts = AppFactsFactory.get_model(client_name)
-        AppFacts.create_table(wait=True)
-
-        ZoneFacts = ZoneFactsFactory.get_model(client_name)
-        ZoneFacts.create_table(wait=True)
-
-        ItemModel = ItemModelFactory.get_model(client_name)
-        ItemModel.create_table(wait=True)
-
-        EventModel = EventModelFactory.get_model(client_name)
-        EventModel.create_table(wait=True)
-
-    except Exception as e:
-        print(f"Error bootstrapping DynamoDB: {e}")  # Fixed: use f-string
-        assert False, f"Failed to bootstrap DynamoDB: {e}"  # Fixed: provide error message
-
-    return True
+from .bootstrap import *
 
 
 def get_organization(real_aws: bool) -> dict[str, str]:
@@ -152,16 +80,16 @@ def get_organization(real_aws: bool) -> dict[str, str]:
     return organization
 
 
-def get_client_data(organization: dict[str, str], arguments: dict[str, Any]) -> ClientFacts:
+def get_client_data(organization: dict[str, str], arguments: dict[str, Any]) -> ClientFactsModel:
     """
-    Create and save ClientFacts test data.
+    Create and save ClientFactsModel test data.
 
     :param organization: Organization information dictionary
     :type organization: dict[str, str]
     :param arguments: Arguments containing client name
     :type arguments: dict[str, Any]
-    :returns: Created ClientFacts instance
-    :rtype: ClientFacts
+    :returns: Created ClientFactsModel instance
+    :rtype: ClientFactsModel
     :raises AssertionError: If 'client' key is not in arguments
 
     Examples
@@ -203,16 +131,16 @@ def get_client_data(organization: dict[str, str], arguments: dict[str, Any]) -> 
     return cf
 
 
-def get_portfolio_data(client_data: ClientFacts, arguments: dict[str, Any]) -> PortfolioFacts:
+def get_portfolio_data(client_data: ClientFactsModel, arguments: dict[str, Any]) -> PortfolioFactsModel:
     """
-    Create and save PortfolioFacts test data.
+    Create and save PortfolioFactsModel test data.
 
-    :param client_data: ClientFacts instance containing client information
-    :type client_data: ClientFacts
+    :param client_data: ClientFactsModel instance containing client information
+    :type client_data: ClientFactsModel
     :param arguments: Arguments containing portfolio name
     :type arguments: dict[str, Any]
-    :returns: Created PortfolioFacts instance
-    :rtype: PortfolioFacts
+    :returns: Created PortfolioFactsModel instance
+    :rtype: PortfolioFactsModel
     :raises AssertionError: If 'portfolio' key is not in arguments
 
     Examples
@@ -259,16 +187,16 @@ def get_portfolio_data(client_data: ClientFacts, arguments: dict[str, Any]) -> P
     return portfolio
 
 
-def get_zone_data(client_data: ClientFacts, arguments: dict[str, Any]) -> ZoneFacts:
+def get_zone_data(client_data: ClientFactsModel, arguments: dict[str, Any]) -> ZoneFactsModel:
     """
-    Create and save ZoneFacts test data.
+    Create and save ZoneFactsModel test data.
 
-    :param client_data: ClientFacts instance containing client information
-    :type client_data: ClientFacts
+    :param client_data: ClientFactsModel instance containing client information
+    :type client_data: ClientFactsModel
     :param arguments: Arguments dictionary (unused but kept for consistency)
     :type arguments: dict[str, Any]
-    :returns: Created ZoneFacts instance
-    :rtype: ZoneFacts
+    :returns: Created ZoneFactsModel instance
+    :rtype: ZoneFactsModel
 
     Examples
     --------
@@ -351,18 +279,18 @@ def get_zone_data(client_data: ClientFacts, arguments: dict[str, Any]) -> ZoneFa
     return zone
 
 
-def get_app_data(portfolio_data: PortfolioFacts, zone_data: ZoneFacts, arguments: dict[str, Any]) -> AppFacts:
+def get_app_data(portfolio_data: PortfolioFactsModel, zone_data: ZoneFactsModel, arguments: dict[str, Any]) -> AppFactsModel:
     """
-    Create and save AppFacts test data.
+    Create and save AppFactsModel test data.
 
-    :param portfolio_data: PortfolioFacts instance containing portfolio information
-    :type portfolio_data: PortfolioFacts
-    :param zone_data: ZoneFacts instance containing zone information
-    :type zone_data: ZoneFacts
+    :param portfolio_data: PortfolioFactsModel instance containing portfolio information
+    :type portfolio_data: PortfolioFactsModel
+    :param zone_data: ZoneFactsModel instance containing zone information
+    :type zone_data: ZoneFactsModel
     :param arguments: Arguments containing app name
     :type arguments: dict[str, Any]
-    :returns: Created AppFacts instance
-    :rtype: AppFacts
+    :returns: Created AppFactsModel instance
+    :rtype: AppFactsModel
     :raises AssertionError: If 'app' key is not in arguments
 
     Examples
@@ -402,7 +330,7 @@ def get_app_data(portfolio_data: PortfolioFacts, zone_data: ZoneFacts, arguments
 
 def initialize(
     arguments: dict[str, Any],
-) -> tuple[ClientFacts, ZoneFacts, PortfolioFacts, AppFacts]:
+) -> tuple[ClientFactsModel, ZoneFactsModel, PortfolioFactsModel, AppFactsModel]:
     """
     Initialize all test data for deployspec testing.
 
@@ -411,7 +339,7 @@ def initialize(
     :param arguments: Arguments containing client, portfolio, and app names
     :type arguments: dict[str, Any]
     :returns: Tuple of created test data instances
-    :rtype: tuple[ClientFacts, ZoneFacts, PortfolioFacts, AppFacts]
+    :rtype: tuple[ClientFactsModel, ZoneFactsModel, PortfolioFactsModel, AppFactsModel]
     :raises Exception: If DynamoDB bootstrap fails
 
     Examples
@@ -424,9 +352,9 @@ def initialize(
 
     org_data = get_organization(False)
 
-    client_data: ClientFacts = get_client_data(org_data, arguments)
-    zone_data: ZoneFacts = get_zone_data(client_data, arguments)
-    portfolio_data: PortfolioFacts = get_portfolio_data(client_data, arguments)
-    app_data: AppFacts = get_app_data(portfolio_data, zone_data, arguments)
+    client_data: ClientFactsModel = get_client_data(org_data, arguments)
+    zone_data: ZoneFactsModel = get_zone_data(client_data, arguments)
+    portfolio_data: PortfolioFactsModel = get_portfolio_data(client_data, arguments)
+    app_data: AppFactsModel = get_app_data(portfolio_data, zone_data, arguments)
 
     return client_data, zone_data, portfolio_data, app_data
