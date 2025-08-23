@@ -59,14 +59,18 @@ def test_load_and_validate_action(task_payload, deployspec: DeploySpec):
 
     accounts, regions = get_accounts_regions(action_spec)
 
-    assert len(accounts) == 3, "The test action should contain 3 accounts for the target"
+    assert (
+        len(accounts) == 3
+    ), "The test action should contain 3 accounts for the target"
     assert len(regions) == 3, "The test action should contain 3 regions for the target"
 
     account = accounts[1]
     region = regions[1]
 
     # Generate the single action for the account/region
-    execute_action = generate_action_command(task_payload, action_spec, label_map, account, region)
+    execute_action = generate_action_command(
+        task_payload, action_spec, label_map, account, region
+    )
 
     # Check if the action is loaded correctly
     assert execute_action.kind == "AWS::DeleteUser"
@@ -85,14 +89,18 @@ def test_generatge_create_stack(task_payload, deployspec: DeploySpec):
 
     accounts, regions = get_accounts_regions(action_spec)
 
-    assert len(accounts) == 3, "The test action should contain 3 accounts for the target"
+    assert (
+        len(accounts) == 3
+    ), "The test action should contain 3 accounts for the target"
     assert len(regions) == 3, "The test action should contain 3 regions for the target"
 
     account = accounts[1]
     region = regions[1]
 
     # Generate the single action for the account/region
-    execute_action = generate_action_command(task_payload, action_spec, label_map, account, region)
+    execute_action = generate_action_command(
+        task_payload, action_spec, label_map, account, region
+    )
 
     assert execute_action is not None, "Should have an create_stack action"
     assert execute_action.kind == "AWS::CreateStack", "Should be a create_stack action"

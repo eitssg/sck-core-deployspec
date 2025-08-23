@@ -80,7 +80,9 @@ def package_package():
                 if file_path.exists():
                     zipf.write(file_path, file_name)
                 else:
-                    pytest.skip(f"Required test file {file_name} not found in {dirname}")
+                    pytest.skip(
+                        f"Required test file {file_name} not found in {dirname}"
+                    )
 
         yield str(package_path)
 
@@ -111,7 +113,9 @@ def upload_package(task_payload: TaskPayload, package_package: str):
     # This is the "upload" step
 
     package_details = task_payload.package
-    bucket = MagicS3Client(Region=package_details.bucket_region).Bucket(package_details.bucket_name)
+    bucket = MagicS3Client(Region=package_details.bucket_region).Bucket(
+        package_details.bucket_name
+    )
 
     try:
         # Upload package.zip (should be small - a few MB is ok, but 100MB is not)
@@ -128,7 +132,9 @@ def upload_package(task_payload: TaskPayload, package_package: str):
         try:
             bucket.delete_object(Key=package_details.key)
         except Exception as cleanup_error:
-            print(f"Warning: Failed to cleanup S3 object {package_details.key}: {cleanup_error}")
+            print(
+                f"Warning: Failed to cleanup S3 object {package_details.key}: {cleanup_error}"
+            )
 
 
 @pytest.fixture(scope="module")
@@ -176,23 +182,33 @@ def test_deployspec_handler_compilation_and_execution(
         response = result["Response"]
 
         # Test compilation summary
-        assert "CompilationSummary" in response, "Response should contain compilation summary"
+        assert (
+            "CompilationSummary" in response
+        ), "Response should contain compilation summary"
         compilation_summary = response["CompilationSummary"]
 
         assert "SpecsCompiled" in compilation_summary
         assert "TotalActionsGenerated" in compilation_summary
-        assert len(compilation_summary["SpecsCompiled"]) > 0, "Should have compiled at least one spec"
+        assert (
+            len(compilation_summary["SpecsCompiled"]) > 0
+        ), "Should have compiled at least one spec"
 
         # Verify task types
         expected_tasks = ["deploy", "teardown", "plan", "apply"]
         for task in expected_tasks:
-            assert task in compilation_summary["SpecsCompiled"], f"Task '{task}' should be one of {expected_tasks}"
+            assert (
+                task in compilation_summary["SpecsCompiled"]
+            ), f"Task '{task}' should be one of {expected_tasks}"
 
         # Test status
         assert "Status" in response, "Response should contain status"
-        assert response["Status"] == "COMPILE_COMPLETE", "Status should be 'COMPILE_COMPLETE'"
+        assert (
+            response["Status"] == "COMPILE_COMPLETE"
+        ), "Status should be 'COMPILE_COMPLETE'"
 
-        print(f"✅ Handler test passed - Compiled {len(compilation_summary['SpecsCompiled'])} specs")
+        print(
+            f"✅ Handler test passed - Compiled {len(compilation_summary['SpecsCompiled'])} specs"
+        )
 
     except ValidationError as e:
         print(f"Validation errors: {e.errors()}")
@@ -208,18 +224,23 @@ def test_deployspec_handler_error_handling():
     invalid_payload = {"invalid": "data"}
 
     response = deployspec_compiler(invalid_payload, None)
-    assert response is not None, "Handler should return a response even with invalid input"
+    assert (
+        response is not None
+    ), "Handler should return a response even with invalid input"
     assert "Response" in response, "Response should contain 'Response' key"
     response = response.get("Response", {})
     assert "Status" in response, "Response should contain 'Status' key"
     assert response["Status"] == "COMPILE_FAILED", "Status should be 'COMPILE_FAILED'"
     assert (
-        response["Message"] == "Deployspec compilation failed (ValidationError): TaskPayload"
+        response["Message"]
+        == "Deployspec compilation failed (ValidationError): TaskPayload"
     ), "Message should indicate validation failure"
 
 
 @pytest.mark.parametrize("missing_field", ["DeploymentDetails", "Package"])
-def test_deployspec_handler_missing_required_fields(task_payload: TaskPayload, missing_field):
+def test_deployspec_handler_missing_required_fields(
+    task_payload: TaskPayload, missing_field
+):
     """Test handler behavior with missing required fields."""
     payload_dict = task_payload.model_dump()
 
@@ -228,11 +249,16 @@ def test_deployspec_handler_missing_required_fields(task_payload: TaskPayload, m
         del payload_dict[missing_field]
 
     response = deployspec_compiler(payload_dict, None)
-    assert response is not None, "Handler should return a response even with missing fields"
+    assert (
+        response is not None
+    ), "Handler should return a response even with missing fields"
     assert "Response" in response, "Response should contain 'Response' key"
     response = response.get("Response", {})
     assert "Status" in response, "Response should contain 'Status' key"
-    assert response["Status"] == "COMPILE_FAILED", "Status should be 'COMPILE_FAILED' when required fields are missing"
     assert (
-        "Deployspec compilation failed (ValidationError): TaskPayload" in response["Message"]
+        response["Status"] == "COMPILE_FAILED"
+    ), "Status should be 'COMPILE_FAILED' when required fields are missing"
+    assert (
+        "Deployspec compilation failed (ValidationError): TaskPayload"
+        in response["Message"]
     ), "Message should indicate validation failure"

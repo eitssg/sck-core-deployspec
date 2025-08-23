@@ -51,7 +51,13 @@ from core_framework.constants import (
 
 from core_db.facter import get_facts
 
-from core_framework.models import ActionSpec, TaskPayload, DeploySpec, ActionSpec, DeploymentDetails
+from core_framework.models import (
+    ActionSpec,
+    TaskPayload,
+    DeploySpec,
+    ActionSpec,
+    DeploymentDetails,
+)
 
 from core_helper.magic import MagicS3Client, SeekableStreamWrapper
 
@@ -141,7 +147,9 @@ def __load_deployspec_file(task_payload: TaskPayload) -> dict[str, DeploySpec]:
     bucket.download_fileobj(Key=package_key, Fileobj=fileobj)
 
     # Reset Buffer Position
-    fileobj.seek(0)  # Reset the pointer to the beginning so we can begin processing the zip
+    fileobj.seek(
+        0
+    )  # Reset the pointer to the beginning so we can begin processing the zip
 
     specs: dict[str, DeploySpec] = {}
 
@@ -177,7 +185,9 @@ def __load_deployspec_file(task_payload: TaskPayload) -> dict[str, DeploySpec]:
 
     # Process deployspec
     if not specs:
-        raise Exception("Package does not contain any deployspec files, cannot continue")
+        raise Exception(
+            "Package does not contain any deployspec files, cannot continue"
+        )
 
     return specs
 
@@ -220,7 +230,9 @@ def __load_deployspec_zip(task_payload: TaskPayload) -> dict[str, DeploySpec]:
         raise ValueError("Package key is required")
 
     # Download file from S3
-    log.info("Downloading package from storage ({}) ({})".format(bucket_name, package_key))
+    log.info(
+        "Downloading package from storage ({}) ({})".format(bucket_name, package_key)
+    )
 
     # Get the storage location
     bucket = MagicS3Client.get_bucket(Region=region, BucketName=bucket_name)
@@ -241,7 +253,9 @@ def __load_deployspec_zip(task_payload: TaskPayload) -> dict[str, DeploySpec]:
     return spec
 
 
-def __process_package_zip(task_payload: TaskPayload, temp_file: tempfile.NamedTemporaryFile) -> dict[str, DeploySpec]:
+def __process_package_zip(
+    task_payload: TaskPayload, temp_file: tempfile.NamedTemporaryFile
+) -> dict[str, DeploySpec]:
     """
     Process the zip package copying content to the artifacts store while extracting the actions
     into a DeploySpec object. (plan, apply, deploy, or teardown)
@@ -274,7 +288,9 @@ def __process_package_zip(task_payload: TaskPayload, temp_file: tempfile.NamedTe
     # This will be returned and added to the task_payload packages
     specs: dict[str, DeploySpec] = {}
 
-    log.debug("Extracting {} and Uploading artifact to: {}", V_PACKAGE_ZIP, upload_prefix)
+    log.debug(
+        "Extracting {} and Uploading artifact to: {}", V_PACKAGE_ZIP, upload_prefix
+    )
 
     bucket = MagicS3Client.get_bucket(Region=bucket_region, BucketName=bucket_name)
 
@@ -309,9 +325,13 @@ def __process_package_zip(task_payload: TaskPayload, temp_file: tempfile.NamedTe
                 elif name.endswith(".json"):
                     upload_data = util.to_json(data)
                 else:
-                    upload_data = util.to_yaml(data)  # Default to YAML (*.actions files)
+                    upload_data = util.to_yaml(
+                        data
+                    )  # Default to YAML (*.actions files)
 
-                bucket.put_object(Key=key, Body=upload_data, ServerSideEncryption="AES256")
+                bucket.put_object(
+                    Key=key, Body=upload_data, ServerSideEncryption="AES256"
+                )
 
             else:
                 data = zipfile_obj.read(name)
@@ -326,7 +346,9 @@ def __process_package_zip(task_payload: TaskPayload, temp_file: tempfile.NamedTe
 
     # Process deployspec
     if not specs:
-        raise Exception("Package does not contain any deployspec files, cannot continue")
+        raise Exception(
+            "Package does not contain any deployspec files, cannot continue"
+        )
 
     return specs
 
@@ -353,13 +375,21 @@ def get_accounts_regions(action_spec: ActionSpec) -> tuple[list[str], list[str]]
     >>> accounts, regions = get_accounts_regions(action_spec)
     >>> # Returns: (["123456789012"], ["us-east-1"])
     """
-    accounts = action_spec.params.get("accounts") or action_spec.params.get("Accounts") or []
+    accounts = (
+        action_spec.params.get("accounts") or action_spec.params.get("Accounts") or []
+    )
     account = action_spec.params.get("account") or action_spec.params.get("Account")
     if account and account not in accounts:
         accounts.append(account)
 
-    regions = action_spec.params.get("regions") or action_spec.params.get("Regions") or []
-    region = action_spec.params.get("region") or action_spec.params.get("Region") or util.get_region()
+    regions = (
+        action_spec.params.get("regions") or action_spec.params.get("Regions") or []
+    )
+    region = (
+        action_spec.params.get("region")
+        or action_spec.params.get("Region")
+        or util.get_region()
+    )
     if region and region not in regions:
         regions.append(region)
 
@@ -388,7 +418,11 @@ def get_region_account_labels(action_spec: ActionSpec) -> list[str]:
     """
     accounts, regions = get_accounts_regions(action_spec)
 
-    labels = [__get_action_name(action_spec, account, region) for account in accounts for region in regions]
+    labels = [
+        __get_action_name(action_spec, account, region)
+        for account in accounts
+        for region in regions
+    ]
 
     return labels
 
@@ -415,7 +449,9 @@ def __get_action_name(action_spec: ActionSpec, account: str, region: str) -> str
     return f"{action_spec.label}-{account}-{region}"
 
 
-def compile_deployspec(task_payload: TaskPayload, deployspec: DeploySpec) -> list[ActionSpec]:
+def compile_deployspec(
+    task_payload: TaskPayload, deployspec: DeploySpec
+) -> list[ActionSpec]:
     """
     Convert deployspec into an actions list.
 
@@ -451,7 +487,9 @@ def compile_deployspec(task_payload: TaskPayload, deployspec: DeploySpec) -> lis
     for action_spec in deployspec.actions:
         if not ActionFactory.is_valid_action(action_spec.kind):
             raise ValueError(f"Unknown action type {action_spec.kind}")
-        compiled_actions.extend(compile_action(action_spec, task_payload, spec_label_map))
+        compiled_actions.extend(
+            compile_action(action_spec, task_payload, spec_label_map)
+        )
     return compiled_actions
 
 
@@ -463,7 +501,9 @@ def get_spec_label_map(actions: list[ActionSpec]) -> dict[str, list[str]]:
     return spec_label_map
 
 
-def compile_action(action_spec: ActionSpec, task_payload: TaskPayload, spec_label_map: SpecLabelMapType) -> list[ActionSpec]:
+def compile_action(
+    action_spec: ActionSpec, task_payload: TaskPayload, spec_label_map: SpecLabelMapType
+) -> list[ActionSpec]:
     """
     Compile a single action specification into executable actions.
 
@@ -489,7 +529,9 @@ def compile_action(action_spec: ActionSpec, task_payload: TaskPayload, spec_labe
     action_list: list[ActionSpec] = []
     for account in accounts:
         for region in regions:
-            execute_action = generate_action_command(task_payload, action_spec, spec_label_map, account, region)
+            execute_action = generate_action_command(
+                task_payload, action_spec, spec_label_map, account, region
+            )
             action_list.append(execute_action)
     return action_list
 
@@ -535,7 +577,9 @@ def generate_action_command(
 
     params = deepcopy(action_spec.params)
 
-    __delkeys(["account", "region", "accounts", "regions", "Accounts", "Regions"], params)
+    __delkeys(
+        ["account", "region", "accounts", "regions", "Accounts", "Regions"], params
+    )
 
     params["account"] = account
     params["region"] = region
@@ -558,7 +602,9 @@ def generate_action_command(
 
     if hasattr(params, "tags"):
         # Add default tags to all actions
-        params.tags = __get_tags(action_spec.scope, task_payload.deployment_details, params.tags)
+        params.tags = __get_tags(
+            action_spec.scope, task_payload.deployment_details, params.tags
+        )
 
     # Validate ActionSpec.  Note, the "Kind" field is automatically updated in generate_action_spec
     execute_action = klass.generate_action_spec(
@@ -599,12 +645,16 @@ def __get_action_template_url(
     >>> # Returns: "s3://my-bucket/artifacts/portfolio/app/branch/build/vpc.yaml"
     """
 
-    key = __getany(action_spec.params, ["template_url", "TemplateUrl", "template", "Template"])
+    key = __getany(
+        action_spec.params, ["template_url", "TemplateUrl", "template", "Template"]
+    )
     if key is None:
         return None
     scope = __get_action_scope(action_spec, deployment_details)
 
-    return __get_template_url(bucket_name, bucket_region, deployment_details, key, scope)
+    return __get_template_url(
+        bucket_name, bucket_region, deployment_details, key, scope
+    )
 
 
 def __get_template_url(
@@ -707,7 +757,9 @@ def apply_context(actions: list[ActionSpec], context: dict) -> list[ActionSpec]:
         # if the root should be "core" or if the root should be "context".
         # If we change the root to "context", then we need to change the
         # input to template.render(context=context[CONTEXT_ROOT])
-        rendered_contents = renderer.render_string(unrendered_contents, context[CONTEXT_ROOT])
+        rendered_contents = renderer.render_string(
+            unrendered_contents, context[CONTEXT_ROOT]
+        )
 
         action_list = util.from_yaml(rendered_contents)
 
@@ -748,13 +800,24 @@ def apply_context(actions: list[ActionSpec], context: dict) -> list[ActionSpec]:
             # Log template syntax errors with more detail
             if isinstance(e, jinja2.TemplateSyntaxError):
                 error_details.update(
-                    {"syntax_error": True, "error_location": f"line {e.lineno}" if e.lineno else "unknown location"}
+                    {
+                        "syntax_error": True,
+                        "error_location": (
+                            f"line {e.lineno}" if e.lineno else "unknown location"
+                        ),
+                    }
                 )
-                log.error("Jinja2 Template Syntax Error at {}: {}", error_details["error_location"], e.message)
+                log.error(
+                    "Jinja2 Template Syntax Error at {}: {}",
+                    error_details["error_location"],
+                    e.message,
+                )
 
             # Log undefined variable errors
             elif isinstance(e, jinja2.UndefinedError):
-                error_details.update({"undefined_error": True, "undefined_variable": str(e)})
+                error_details.update(
+                    {"undefined_error": True, "undefined_variable": str(e)}
+                )
                 log.error("Jinja2 Undefined Variable Error: {}", str(e))
 
             # Log template runtime errors
@@ -777,7 +840,11 @@ def apply_context(actions: list[ActionSpec], context: dict) -> list[ActionSpec]:
 
         # Log the template content for debugging (truncated if too long)
         try:
-            template_preview = unrendered_contents[:500] + "..." if len(unrendered_contents) > 500 else unrendered_contents
+            template_preview = (
+                unrendered_contents[:500] + "..."
+                if len(unrendered_contents) > 500
+                else unrendered_contents
+            )
             error_details["template_preview"] = template_preview
             log.debug("Template content preview: {}", template_preview)
         except:
@@ -786,7 +853,9 @@ def apply_context(actions: list[ActionSpec], context: dict) -> list[ActionSpec]:
         # Log available context for debugging
         if context and CONTEXT_ROOT in context:
             context_preview = (
-                str(context[CONTEXT_ROOT])[:300] + "..." if len(str(context[CONTEXT_ROOT])) > 300 else str(context[CONTEXT_ROOT])
+                str(context[CONTEXT_ROOT])[:300] + "..."
+                if len(str(context[CONTEXT_ROOT])) > 300
+                else str(context[CONTEXT_ROOT])
             )
             error_details["context_preview"] = context_preview
             log.debug("Context preview: {}", context_preview)
@@ -801,7 +870,11 @@ def apply_context(actions: list[ActionSpec], context: dict) -> list[ActionSpec]:
     return actions
 
 
-def __get_tags(scope: str | None, deployment_details: DeploymentDetails, user_tags: dict[str, str] | None) -> dict | None:
+def __get_tags(
+    scope: str | None,
+    deployment_details: DeploymentDetails,
+    user_tags: dict[str, str] | None,
+) -> dict | None:
     """
     Generate AWS tags based on deployment scope and details.
 
@@ -895,12 +968,18 @@ def __get_depends_on(action: ActionSpec, spec_label_map: SpecLabelMapType) -> li
     if not action.depends_on:
         return []
 
-    depends_on: list = [item for sublist in map(lambda name: spec_label_map[name], action.depends_on) for item in sublist]
+    depends_on: list = [
+        item
+        for sublist in map(lambda name: spec_label_map[name], action.depends_on)
+        for item in sublist
+    ]
 
     return depends_on
 
 
-def __get_action_scope(action: ActionSpec, deployment_details: DeploymentDetails) -> str:
+def __get_action_scope(
+    action: ActionSpec, deployment_details: DeploymentDetails
+) -> str:
     """
     Determine the deployment scope for an action based on stack name templates.
 

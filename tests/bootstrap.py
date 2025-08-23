@@ -23,7 +23,9 @@ def bootstrap_dynamo():
     # see environment variables in .env
     host = util.get_dynamodb_host()
 
-    assert host == "http://localhost:8000", "DYNAMODB_HOST must be set to http://localhost:8000"
+    assert (
+        host == "http://localhost:8000"
+    ), "DYNAMODB_HOST must be set to http://localhost:8000"
 
     try:
         client = util.get_client()

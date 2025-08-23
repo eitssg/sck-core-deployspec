@@ -84,7 +84,9 @@ def handler(event: dict, context: Any | None) -> dict:
             # Create a new task-specific payload by copying the original
             task_specific_payload = TaskPayload(**task_payload.model_dump())
             task_specific_payload.set_task(task)
-            task_payloads.append(task_specific_payload)  # Fixed: append the task_specific_payload
+            task_payloads.append(
+                task_specific_payload
+            )  # Fixed: append the task_specific_payload
 
             log.debug(f"Processing task: {task}", details=spec.model_dump())
 
@@ -156,7 +158,9 @@ def handler(event: dict, context: Any | None) -> dict:
             if validation_errors:
                 error_details["ValidationErrors"] = validation_errors
             if "compilation_summary" in locals():
-                error_details["SpecsCompiledBeforeFailure"] = compilation_summary["SpecsCompiled"]
+                error_details["SpecsCompiledBeforeFailure"] = compilation_summary[
+                    "SpecsCompiled"
+                ]
             if "task" in locals():
                 error_details["FailedTask"] = task
             if "task_payload" in locals():
@@ -165,7 +169,9 @@ def handler(event: dict, context: Any | None) -> dict:
         except Exception as context_error:
             log.warning(f"Failed to add error context: {str(context_error)}")
 
-        log.trace("Error traceback details", details={"FullTraceback": traceback.format_exc()})
+        log.trace(
+            "Error traceback details", details={"FullTraceback": traceback.format_exc()}
+        )
 
         log.error("Deployspec compilation failed", details=error_details)
 

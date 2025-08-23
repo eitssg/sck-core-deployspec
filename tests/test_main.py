@@ -141,7 +141,9 @@ def _get_action_parameters(name: str, account: list[str], region: list[str]) -> 
     }
 
 
-def _get_user_action_parameters(name: str, user: str, account: str, region: str) -> dict:
+def _get_user_action_parameters(
+    name: str, user: str, account: str, region: str
+) -> dict:
     """Helper to create user action parameters."""
     return {
         "stack_name": name,
