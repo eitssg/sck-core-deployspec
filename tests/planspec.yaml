@@ -1,10 +1,10 @@
 - label: test1-create-change-set
   type: create_change_set
-  params:
+  spec:
     stack_name: my-first-stack
     change_set_name: my-first-change-set
     template: template.yaml
-    stack_parameters:
+    parameters:
       build: 12345
     accounts:
       - '123456789012'

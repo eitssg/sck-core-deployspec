@@ -4,7 +4,7 @@ build-backend = "poetry_dynamic_versioning.backend"
 
 [tool.poetry]
 name = "sck-core-deployspec"
-version = "0.0.11-pre.5+c528496"
+version = "0.0.10"
 description = "Core Automation Deployspec Actions Compiler lambda function"
 authors = [ "James Barwick <jbarwick@me.com>",]
 license = "GPL-3.0-only"
@@ -22,8 +22,8 @@ style = "semver"
 
 [tool.poetry.dependencies]
 python = "^3.12"
-boto3 = ">=1.39.9"
-botocore = ">=1.39.9"
+boto3 = ">=1.40.11"
+botocore = ">=1.40.11"
 
 [tool.poetry.dependencies.sck-core-execute]
 path = "../sck-core-execute"
@@ -49,5 +49,5 @@ pytest = "^8.3.3"
 flake8 = "^7.1.1"
 cfn-lint = "^1.22.3"
 black = "^24.10.0"
-boto3-stubs = ">=1.39.9"
+boto3-stubs = ">=1.40.11"
 pytest-dotenv = "^0.5.2"

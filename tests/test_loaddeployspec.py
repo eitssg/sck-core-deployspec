@@ -60,7 +60,7 @@ def test_load_deployspec_yaml_format(test_data_dir, task_payload: TaskPayload):
     assert isinstance(
         action_spec, ActionSpec
     ), "ActionSpec should be an instance of ActionSpec"
-    assert isinstance(action_spec.params, dict), "ActionSpec params should be a dict"
+    assert isinstance(action_spec.spec, dict), "ActionSpec spec should be a dict"
 
 
 def test_load_deployspec_json_format(test_data_dir, task_payload: TaskPayload):
@@ -92,7 +92,7 @@ def test_load_deployspec_json_format(test_data_dir, task_payload: TaskPayload):
     assert isinstance(
         action_spec, ActionSpec
     ), "ActionSpec should be an instance of ActionSpec"
-    assert isinstance(action_spec.params, dict), "ActionSpec params should be a dict"
+    assert isinstance(action_spec.spec, dict), "ActionSpec spec should be a dict"
 
 
 def test_load_deployspec_json_error_handling(test_data_dir, task_payload: TaskPayload):

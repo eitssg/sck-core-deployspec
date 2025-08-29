@@ -118,7 +118,7 @@ def test_action_spec_validation_with_compiler_functions():
         action_spec = ActionSpec(**valid_spec)
         assert action_spec.label == "valid_stack-label"
         assert action_spec.type == "create_stack"
-        assert "stack_name" in action_spec.params
+        assert "stack_name" in action_spec.spec
     except ValidationError as e:
         pytest.fail(f"Valid ActionSpec failed validation: {e.errors()}")
 
@@ -160,7 +160,7 @@ def _get_action(name: str, account: list[str], region: list[str]) -> dict:
     return {
         "label": label,
         "type": "create_stack",
-        "params": _get_action_parameters(name, account, region),
+        "spec": _get_action_parameters(name, account, region),
         "scope": "build",
     }
 
@@ -176,7 +176,7 @@ def _get_user_action(name: str, user: str, account: str, region: str) -> dict:
     return {
         "label": label,
         "type": "create_user",
-        "params": _get_user_action_parameters(name, user, account, region),
+        "spec": _get_user_action_parameters(name, user, account, region),
     }
 
 
@@ -192,7 +192,7 @@ def sample_action_spec():
     return {
         "label": "test-stack-label",
         "type": "create_stack",
-        "params": {
+        "spec": {
             "stack_name": "test-stack",
             "template": "test-stack.yaml",
             "accounts": ["123456789012"],
@@ -228,6 +228,6 @@ def test_actionspec_integration(sample_action_spec):
     assert labels == expected_labels
 
     # Test scope detection
-    scope = __get_stack_scope(action_spec.params.get("stack_name", ""))
+    scope = __get_stack_scope(action_spec.spec.get("stack_name", ""))
     # This should return None since "test-stack" doesn't match any template pattern
     assert scope is None

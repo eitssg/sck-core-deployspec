@@ -1,6 +1,6 @@
   - Name: test1-create-user-123456789012-us-east-1
     Kind: AWS::CreateUser
-    Params:
+    Spec:
       Account: '123456789012'
       Region: us-east-1
       UserNames:
@@ -10,7 +10,7 @@
     SaveOutputs: true
   - Name: test1-create-user-123456789012-us-west-2
     Kind: AWS::CreateUser
-    Params:
+    Spec:
       Account: '123456789012'
       Region: us-west-2
       UserNames:
@@ -20,7 +20,7 @@
     SaveOutputs: true
   - Name: test1-create-user-123456789012-ap-southeast-1
     Kind: AWS::CreateUser
-    Params:
+    Spec:
       Account: '123456789012'
       Region: ap-southeast-1
       UserNames:
@@ -30,7 +30,7 @@
     SaveOutputs: true
   - Name: test1-create-user-123456789013-us-east-1
     Kind: AWS::CreateUser
-    Params:
+    Spec:
       Account: '123456789013'
       Region: us-east-1
       UserNames:
@@ -40,7 +40,7 @@
     SaveOutputs: true
   - Name: test1-create-user-123456789013-us-west-2
     Kind: AWS::CreateUser
-    Params:
+    Spec:
       Account: '123456789013'
       Region: us-west-2
       UserNames:
@@ -50,7 +50,7 @@
     SaveOutputs: true
   - Name: test1-create-user-123456789013-ap-southeast-1
     Kind: AWS::CreateUser
-    Params:
+    Spec:
       Account: '123456789013'
       Region: ap-southeast-1
       UserNames:
@@ -60,7 +60,7 @@
     SaveOutputs: true
   - Name: test1-create-user-123456789014-us-east-1
     Kind: AWS::CreateUser
-    Params:
+    Spec:
       Account: '123456789014'
       Region: us-east-1
       UserNames:
@@ -70,7 +70,7 @@
     SaveOutputs: true
   - Name: test1-create-user-123456789014-us-west-2
     Kind: AWS::CreateUser
-    Params:
+    Spec:
       Account: '123456789014'
       Region: us-west-2
       UserNames:
@@ -80,7 +80,7 @@
     SaveOutputs: true
   - Name: test1-create-user-123456789014-ap-southeast-1
     Kind: AWS::CreateUser
-    Params:
+    Spec:
       Account: '123456789014'
       Region: ap-southeast-1
       UserNames:
@@ -100,7 +100,7 @@
       - test1-create-user-123456789014-us-east-1
       - test1-create-user-123456789014-us-west-2
       - test1-create-user-123456789014-ap-southeast-1
-    Params:
+    Spec:
       Account: '123456789012'
       Region: us-east-1
       UserNames:
@@ -119,7 +119,7 @@
       - test1-create-user-123456789014-us-east-1
       - test1-create-user-123456789014-us-west-2
       - test1-create-user-123456789014-ap-southeast-1
-    Params:
+    Spec:
       Account: '123456789012'
       Region: us-west-2
       UserNames:
@@ -138,7 +138,7 @@
       - test1-create-user-123456789014-us-east-1
       - test1-create-user-123456789014-us-west-2
       - test1-create-user-123456789014-ap-southeast-1
-    Params:
+    Spec:
       Account: '123456789012'
       Region: ap-southeast-1
       UserNames:
@@ -157,7 +157,7 @@
       - test1-create-user-123456789014-us-east-1
       - test1-create-user-123456789014-us-west-2
       - test1-create-user-123456789014-ap-southeast-1
-    Params:
+    Spec:
       Account: '123456789013'
       Region: us-east-1
       UserNames:
@@ -176,7 +176,7 @@
       - test1-create-user-123456789014-us-east-1
       - test1-create-user-123456789014-us-west-2
       - test1-create-user-123456789014-ap-southeast-1
-    Params:
+    Spec:
       Account: '123456789013'
       Region: us-west-2
       UserNames:
@@ -195,7 +195,7 @@
       - test1-create-user-123456789014-us-east-1
       - test1-create-user-123456789014-us-west-2
       - test1-create-user-123456789014-ap-southeast-1
-    Params:
+    Spec:
       Account: '123456789013'
       Region: ap-southeast-1
       UserNames:
@@ -214,7 +214,7 @@
       - test1-create-user-123456789014-us-east-1
       - test1-create-user-123456789014-us-west-2
       - test1-create-user-123456789014-ap-southeast-1
-    Params:
+    Spec:
       Account: '123456789014'
       Region: us-east-1
       UserNames:
@@ -233,7 +233,7 @@
       - test1-create-user-123456789014-us-east-1
       - test1-create-user-123456789014-us-west-2
       - test1-create-user-123456789014-ap-southeast-1
-    Params:
+    Spec:
       Account: '123456789014'
       Region: us-west-2
       UserNames:
@@ -252,7 +252,7 @@
       - test1-create-user-123456789014-us-east-1
       - test1-create-user-123456789014-us-west-2
       - test1-create-user-123456789014-ap-southeast-1
-    Params:
+    Spec:
       Account: '123456789014'
       Region: ap-southeast-1
       UserNames:
@@ -261,7 +261,7 @@
     SaveOutputs: true
   - Name: test1-create-stack-123456789012-us-east-1
     Kind: AWS::CreateStack
-    Params:
+    Spec:
       Account: '123456789012'
       Region: us-east-1
       StackName: '{{ portfolio }}-stack-{{ app }}-{{ build }}'
@@ -288,7 +288,7 @@
     SaveOutputs: true
   - Name: test1-create-stack-123456789012-us-west-2
     Kind: AWS::CreateStack
-    Params:
+    Spec:
       Account: '123456789012'
       Region: us-west-2
       StackName: '{{ portfolio }}-stack-{{ app }}-{{ build }}'
@@ -315,7 +315,7 @@
     SaveOutputs: true
   - Name: test1-create-stack-123456789012-ap-southeast-1
     Kind: AWS::CreateStack
-    Params:
+    Spec:
       Account: '123456789012'
       Region: ap-southeast-1
       StackName: '{{ portfolio }}-stack-{{ app }}-{{ build }}'
@@ -342,7 +342,7 @@
     SaveOutputs: true
   - Name: test1-create-stack-123456789013-us-east-1
     Kind: AWS::CreateStack
-    Params:
+    Spec:
       Account: '123456789013'
       Region: us-east-1
       StackName: '{{ portfolio }}-stack-{{ app }}-{{ build }}'
@@ -369,7 +369,7 @@
     SaveOutputs: true
   - Name: test1-create-stack-123456789013-us-west-2
     Kind: AWS::CreateStack
-    Params:
+    Spec:
       Account: '123456789013'
       Region: us-west-2
       StackName: '{{ portfolio }}-stack-{{ app }}-{{ build }}'
@@ -396,7 +396,7 @@
     SaveOutputs: true
   - Name: test1-create-stack-123456789013-ap-southeast-1
     Kind: AWS::CreateStack
-    Params:
+    Spec:
       Account: '123456789013'
       Region: ap-southeast-1
       StackName: '{{ portfolio }}-stack-{{ app }}-{{ build }}'
@@ -423,7 +423,7 @@
     SaveOutputs: true
   - Name: test1-create-stack-123456789014-us-east-1
     Kind: AWS::CreateStack
-    Params:
+    Spec:
       Account: '123456789014'
       Region: us-east-1
       StackName: '{{ portfolio }}-stack-{{ app }}-{{ build }}'
@@ -450,7 +450,7 @@
     SaveOutputs: true
   - Name: test1-create-stack-123456789014-us-west-2
     Kind: AWS::CreateStack
-    Params:
+    Spec:
       Account: '123456789014'
       Region: us-west-2
       StackName: '{{ portfolio }}-stack-{{ app }}-{{ build }}'
@@ -477,7 +477,7 @@
     SaveOutputs: true
   - Name: test1-create-stack-123456789014-ap-southeast-1
     Kind: AWS::CreateStack
-    Params:
+    Spec:
       Account: '123456789014'
       Region: ap-southeast-1
       StackName: '{{ portfolio }}-stack-{{ app }}-{{ build }}'

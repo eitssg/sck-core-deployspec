@@ -370,24 +370,22 @@ def get_accounts_regions(action_spec: ActionSpec) -> tuple[list[str], list[str]]
     Examples
     --------
     >>> action_spec = ActionSpec(
-    ...     params={"account": "123456789012", "region": "us-east-1"}
+    ...     spec={"account": "123456789012", "region": "us-east-1"}
     ... )
     >>> accounts, regions = get_accounts_regions(action_spec)
     >>> # Returns: (["123456789012"], ["us-east-1"])
     """
     accounts = (
-        action_spec.params.get("accounts") or action_spec.params.get("Accounts") or []
+        action_spec.spec.get("accounts") or action_spec.spec.get("Accounts") or []
     )
-    account = action_spec.params.get("account") or action_spec.params.get("Account")
+    account = action_spec.spec.get("account") or action_spec.spec.get("Account")
     if account and account not in accounts:
         accounts.append(account)
 
-    regions = (
-        action_spec.params.get("regions") or action_spec.params.get("Regions") or []
-    )
+    regions = action_spec.spec.get("regions") or action_spec.spec.get("Regions") or []
     region = (
-        action_spec.params.get("region")
-        or action_spec.params.get("Region")
+        action_spec.spec.get("region")
+        or action_spec.spec.get("Region")
         or util.get_region()
     )
     if region and region not in regions:
@@ -410,7 +408,7 @@ def get_region_account_labels(action_spec: ActionSpec) -> list[str]:
     --------
     >>> action_spec = ActionSpec(
     ...     label="create-vpc",
-    ...     params={"accounts": ["123", "456"], "regions": ["us-east-1", "us-west-2"]}
+    ...     spec={"accounts": ["123", "456"], "regions": ["us-east-1", "us-west-2"]}
     ... )
     >>> labels = get_region_account_labels(action_spec)
     >>> # Returns: ["create-vpc-123-us-east-1", "create-vpc-123-us-west-2",
@@ -466,7 +464,7 @@ def compile_deployspec(
     Examples
     --------
     >>> deployspec = DeploySpec(actions=[
-    ...     ActionSpec(type="create_stack", label="vpc", params={...})
+    ...     ActionSpec(type="create_stack", label="vpc", spec={...})
     ... ])
     >>> actions = compile_deployspec(task_payload, deployspec)
     >>> # Returns: [ActionSpec(...)]
@@ -519,7 +517,7 @@ def compile_action(
 
     Examples
     --------
-    >>> action_spec = ActionSpec(type="create_stack", label="vpc", params={...})
+    >>> action_spec = ActionSpec(type="create_stack", label="vpc", spec={...})
     >>> actions = compile_action(action_spec, task_payload, spec_label_map,
     ...                         allow_multiple_stacks=True, kind=CreateStackActionSpec)
     >>> # Returns: [ActionSpec(...)]
@@ -562,7 +560,7 @@ def generate_action_command(
 
     Examples
     --------
-    >>> action_spec = ActionSpec(action="AWS::CreateStack", label="vpc", params={...})
+    >>> action_spec = ActionSpec(action="AWS::CreateStack", label="vpc", spec={...})
     >>> command = generate_action_command(task_payload, action_spec, spec_label_map,
     ...                                  "123456789012", "us-east-1")
     >>> # Returns: ActionSpec with executable parameters
@@ -575,35 +573,33 @@ def generate_action_command(
     if klass is None:
         raise ValueError(f"Cannot find action class for {action_spec.kind}")
 
-    params = deepcopy(action_spec.params)
+    spec = deepcopy(action_spec.spec)
 
-    __delkeys(
-        ["account", "region", "accounts", "regions", "Accounts", "Regions"], params
-    )
+    __delkeys(["account", "region", "accounts", "regions", "Accounts", "Regions"], spec)
 
-    params["account"] = account
-    params["region"] = region
+    spec["account"] = account
+    spec["region"] = region
 
     # Validate Parameters
-    params = klass.generate_action_parameters(**params)
+    spec = klass.generate_action_parameters(**spec)
 
     # Check if the pydantic model has the "TemplateUrl" field, if it does
     # update the path to the bucket deployment details.
-    if hasattr(params, "template_url"):
-        params.template_url = __get_action_template_url(
+    if hasattr(spec, "template_url"):
+        spec.template_url = __get_action_template_url(
             action_spec,
             task_payload.actions.bucket_name,
             task_payload.actions.bucket_region,
             task_payload.deployment_details,
         )
 
-    if hasattr(params, "stack_parameters"):
-        __apply_syntax_update(params.stack_parameters)
+    if hasattr(spec, "parameters"):
+        __apply_syntax_update(spec.parameters)
 
-    if hasattr(params, "tags"):
+    if hasattr(spec, "tags"):
         # Add default tags to all actions
-        params.tags = __get_tags(
-            action_spec.scope, task_payload.deployment_details, params.tags
+        spec.tags = __get_tags(
+            action_spec.scope, task_payload.deployment_details, spec.tags
         )
 
     # Validate ActionSpec.  Note, the "Kind" field is automatically updated in generate_action_spec
@@ -611,7 +607,7 @@ def generate_action_command(
         **{
             "Name": __get_action_name(action_spec, account, region),
             "DependsOn": __get_depends_on(action_spec, spec_label_map),
-            "Params": params.model_dump(),
+            "Spec": spec.model_dump(),
         }
     )
 
@@ -640,13 +636,13 @@ def __get_action_template_url(
 
     Examples
     --------
-    >>> action_spec = ActionSpec(params={"template_url": "vpc.yaml"})
+    >>> action_spec = ActionSpec(spec={"template_url": "vpc.yaml"})
     >>> url = __get_action_template_url(action_spec, "my-bucket", "us-east-1", deployment_details)
     >>> # Returns: "s3://my-bucket/artifacts/portfolio/app/branch/build/vpc.yaml"
     """
 
     key = __getany(
-        action_spec.params, ["template_url", "TemplateUrl", "template", "Template"]
+        action_spec.spec, ["template_url", "TemplateUrl", "template", "Template"]
     )
     if key is None:
         return None
@@ -740,10 +736,10 @@ def apply_context(actions: list[ActionSpec], context: dict) -> list[ActionSpec]:
 
     Examples
     --------
-    >>> actions = [ActionSpec(params={"StackName": "{{ core.portfolio }}-vpc"})]
+    >>> actions = [ActionSpec(spec={"StackName": "{{ core.portfolio }}-vpc"})]
     >>> context = {"core": {"portfolio": "web-services"}}
     >>> rendered = apply_context(actions, context)
-    >>> # Returns: [ActionSpec(params={"StackName": "web-services-vpc"})]
+    >>> # Returns: [ActionSpec(spec={"StackName": "web-services-vpc"})]
     """
 
     actions_list: list[dict[str, Any]] = [a.model_dump() for a in actions]
@@ -764,7 +760,7 @@ def apply_context(actions: list[ActionSpec], context: dict) -> list[ActionSpec]:
         action_list = util.from_yaml(rendered_contents)
 
         # Convert the action list back to ActionSpec objects
-        # Please note that the value of action.kind and action.params is NOT validated here.
+        # Please note that the value of action.kind and action.spec is NOT validated here.
         actions: list[ActionSpec] = []
         for action in action_list:
             if isinstance(action, dict):
@@ -915,36 +911,36 @@ def __get_tags(
     return tags if len(tags) > 0 else None
 
 
-def __apply_syntax_update(stack_parameters: dict | None) -> dict | None:
+def __apply_syntax_update(parameters: dict | None) -> dict | None:
     """
     Deal with runner syntax changes for backward compatibility.
 
     Converts old syntax: ``S3ComplianceBucketName: "{{ foo.bar }}"``
     To new syntax: ``S3ComplianceBucketName: "{{ 'foo/bar' | lookup }}"``
 
-    :param stack_parameters: The stack parameters dictionary to update
-    :type stack_parameters: dict | None
+    :param parameters: The stack parameters dictionary to update
+    :type parameters: dict | None
     :returns: The updated stack parameters with new syntax
     :rtype: dict | None
 
     Examples
     --------
-    >>> params = {"BucketName": "{{ portfolio.name }}"}
-    >>> updated = __apply_syntax_update(params)
+    >>> spec = {"BucketName": "{{ portfolio.name }}"}
+    >>> updated = __apply_syntax_update(spec)
     >>> # Returns: {"BucketName": "{{ 'portfolio/name' | lookup }}"}
     """
-    if not stack_parameters:
+    if not parameters:
         return None
 
     # NOTE:  See this is expecting "core" to be the root.
     # See the "apply_context" function.  It's not clear if the root should be "core" or "context".
-    for key in stack_parameters:
-        stack_parameters[key] = re.sub(
+    for key in parameters:
+        parameters[key] = re.sub(
             r"{{ (?!core.)([^.]*)\.(.*) }}",
             r'{{ "\1/\2" | lookup }}',
-            str(stack_parameters[key]),
+            str(parameters[key]),
         )
-    return stack_parameters
+    return parameters
 
 
 def __get_depends_on(action: ActionSpec, spec_label_map: SpecLabelMapType) -> list:
@@ -998,7 +994,7 @@ def __get_action_scope(
 
     Examples
     --------
-    >>> action = ActionSpec(params={"stack_name": "{{ core.Portfolio }}-{{ core.App }}-vpc"})
+    >>> action = ActionSpec(spec={"stack_name": "{{ core.Portfolio }}-{{ core.App }}-vpc"})
     >>> scope = __get_action_scope(action, deployment_details)
     >>> # Returns: "app"
     """
@@ -1009,7 +1005,7 @@ def __get_action_scope(
     if deployment_details.scope:
         return deployment_details.scope
 
-    stack_name = __getany(action.params, ["stack_name", "StackName"], "")
+    stack_name = __getany(action.spec, ["stack_name", "StackName"], "")
 
     return __get_stack_scope(stack_name)
 

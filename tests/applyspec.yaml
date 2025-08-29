@@ -1,6 +1,6 @@
 - label: test1-create-change-set
   type: apply_change_set
-  params:
+  spec:
     stack_name: my-first-stack
     change_set_name: my-first-stack-changeset
     accounts:

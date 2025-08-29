@@ -74,8 +74,8 @@ def test_load_and_validate_action(task_payload, deployspec: DeploySpec):
 
     # Check if the action is loaded correctly
     assert execute_action.kind == "AWS::DeleteUser"
-    assert execute_action.params["UserNames"] == ["bob"]
-    assert execute_action.params["Account"] == "123456789013"
+    assert execute_action.spec["UserNames"] == ["bob"]
+    assert execute_action.spec["Account"] == "123456789013"
 
 
 def test_generatge_create_stack(task_payload, deployspec: DeploySpec):
@@ -104,15 +104,15 @@ def test_generatge_create_stack(task_payload, deployspec: DeploySpec):
 
     assert execute_action is not None, "Should have an create_stack action"
     assert execute_action.kind == "AWS::CreateStack", "Should be a create_stack action"
-    assert execute_action.params is not None
+    assert execute_action.spec is not None
 
-    params = execute_action.params
+    spec = execute_action.spec
 
     # make sure the path of our template was fixed
     assert (
         "test_client-core-automation-ap-southeast-1\\artefacts\\test_portfolio\\test_app\\test-branch\\test_build\\"
-        in params["TemplateUrl"]
+        in spec["TemplateUrl"]
     )
 
     # Did the translation work?
-    assert params["StackParameters"]["OtherParam"] == '{{ "portfolio/name" | lookup }}'
+    assert spec["StackParameters"]["OtherParam"] == '{{ "portfolio/name" | lookup }}'
