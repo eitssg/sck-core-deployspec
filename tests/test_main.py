@@ -13,7 +13,7 @@ from core_deployspec.compiler import (
     get_region_account_labels,
 )
 
-from core_framework.models import ActionSpec
+from core_framework.models import ActionResource
 
 
 def test_get_region_account_labels_multiple_accounts_regions():
@@ -26,8 +26,8 @@ def test_get_region_account_labels_multiple_accounts_regions():
         )
 
         for spec in deployspec:
-            action_spec = ActionSpec(**spec)
-            region_account_labels = get_region_account_labels(action_spec)
+            action_resource = ActionResource(**spec)
+            region_account_labels = get_region_account_labels(action_resource)
 
             expected_labels = [
                 "test_stack-label-123456789012-us-east-1",
@@ -52,8 +52,8 @@ def test_get_region_account_labels_single_account_region():
         ["us-west-2"],
     )
 
-    action_spec = ActionSpec(**deployspec[0])
-    region_account_labels = get_region_account_labels(action_spec)
+    action_resource = ActionResource(**deployspec[0])
+    region_account_labels = get_region_account_labels(action_resource)
 
     expected_labels = ["single_stack-label-123456789012-us-west-2"]
     assert region_account_labels == expected_labels
@@ -63,8 +63,8 @@ def test_get_region_account_labels_empty_lists():
     """Test get_region_account_labels with empty account/region lists."""
     deployspec = _get_deployspec("empty_stack", [], [])
 
-    action_spec = ActionSpec(**deployspec[0])
-    region_account_labels = get_region_account_labels(action_spec)
+    action_resource = ActionResource(**deployspec[0])
+    region_account_labels = get_region_account_labels(action_resource)
 
     assert region_account_labels == []
 
@@ -109,24 +109,24 @@ def test_get_stack_scope_edge_cases():
         pass
 
 
-def test_action_spec_validation_with_compiler_functions():
-    """Test that ActionSpec validation works with compiler functions."""
+def test_action_resource_validation_with_compiler_functions():
+    """Test that ActionResource validation works with compiler functions."""
     # Test valid action spec
     valid_spec = _get_action("valid_stack", ["123456789012"], ["us-east-1"])
 
     try:
-        action_spec = ActionSpec(**valid_spec)
-        assert action_spec.label == "valid_stack-label"
-        assert action_spec.type == "create_stack"
-        assert "stack_name" in action_spec.spec
+        action_resource = ActionResource(**valid_spec)
+        assert action_resource.label == "valid_stack-label"
+        assert action_resource.type == "create_stack"
+        assert "stack_name" in action_resource.spec
     except ValidationError as e:
-        pytest.fail(f"Valid ActionSpec failed validation: {e.errors()}")
+        pytest.fail(f"Valid ActionResource failed validation: {e.errors()}")
 
     # Test invalid action spec (missing required fields)
     invalid_spec = {"label": "test", "type": "invalid_type"}
 
     with pytest.raises(ValidationError):
-        ActionSpec(**invalid_spec)
+        ActionResource(**invalid_spec)
 
 
 # Helper methods (not fixtures, just utility functions)
@@ -141,9 +141,7 @@ def _get_action_parameters(name: str, account: list[str], region: list[str]) -> 
     }
 
 
-def _get_user_action_parameters(
-    name: str, user: str, account: str, region: str
-) -> dict:
+def _get_user_action_parameters(name: str, user: str, account: str, region: str) -> dict:
     """Helper to create user action parameters."""
     return {
         "stack_name": name,
@@ -187,8 +185,8 @@ def _get_user_deployspec(name: str, user: str, account: str, region: str) -> lis
 
 # Test fixtures for integration tests if needed
 @pytest.fixture
-def sample_action_spec():
-    """Fixture providing a sample ActionSpec for integration tests."""
+def sample_action_resource():
+    """Fixture providing a sample ActionResource for integration tests."""
     return {
         "label": "test-stack-label",
         "type": "create_stack",
@@ -216,18 +214,18 @@ def sample_deployment_details():
 
 
 # Integration tests using fixtures
-def test_actionspec_integration(sample_action_spec):
-    """Integration test for ActionSpec creation and compiler function usage."""
-    # Create ActionSpec from sample data
-    action_spec = ActionSpec(**sample_action_spec)
+def test_actionresource_integration(sample_action_resource):
+    """Integration test for ActionResource creation and compiler function usage."""
+    # Create ActionResource from sample data
+    action_resource = ActionResource(**sample_action_resource)
 
     # Test with compiler function
-    labels = get_region_account_labels(action_spec)
+    labels = get_region_account_labels(action_resource)
 
     expected_labels = ["test-stack-label-123456789012-us-east-1"]
     assert labels == expected_labels
 
     # Test scope detection
-    scope = __get_stack_scope(action_spec.spec.get("stack_name", ""))
+    scope = __get_stack_scope(action_resource.spec.get("stack_name", ""))
     # This should return None since "test-stack" doesn't match any template pattern
     assert scope is None

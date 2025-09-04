@@ -4,7 +4,7 @@ from unittest.mock import patch, Mock
 import tempfile
 
 import core_framework as util
-from core_framework.models import DeploySpec, ActionSpec, TaskPayload
+from core_framework.models import DeploySpec, ActionResource, TaskPayload
 from core_deployspec.compiler import load_deployspec
 
 
@@ -46,21 +46,15 @@ def test_load_deployspec_yaml_format(test_data_dir, task_payload: TaskPayload):
     assert deployspec is not None, "Should load deployspec successfully"
 
     assert isinstance(deployspec, DeploySpec), "Should return a DeploySpec instance"
-    assert isinstance(
-        deployspec.action_specs, list
-    ), "DeploySpec actions should be a list"
+    assert isinstance(deployspec.actions, list), "DeploySpec actions should be a list"
 
-    assert (
-        len(deployspec.actions) == 3
-    ), "There should be 6 actions in the sample deployspec.yaml"
+    assert len(deployspec.actions) == 3, "There should be 6 actions in the sample deployspec.yaml"
 
     # Test first action spec
-    action_spec = deployspec.actions[0]
+    action_resource = deployspec.actions[0]
 
-    assert isinstance(
-        action_spec, ActionSpec
-    ), "ActionSpec should be an instance of ActionSpec"
-    assert isinstance(action_spec.spec, dict), "ActionSpec spec should be a dict"
+    assert isinstance(action_resource, ActionResource), "ActionResource should be an instance of ActionResource"
+    assert isinstance(action_resource.spec, dict), "ActionResource spec should be a dict"
 
 
 def test_load_deployspec_json_format(test_data_dir, task_payload: TaskPayload):
@@ -78,21 +72,15 @@ def test_load_deployspec_json_format(test_data_dir, task_payload: TaskPayload):
     assert deployspec is not None, "Should load deployspec successfully"
 
     assert isinstance(deployspec, DeploySpec), "Should return a DeploySpec instance"
-    assert isinstance(
-        deployspec.action_specs, list
-    ), "DeploySpec actions should be a list"
+    assert isinstance(deployspec.actions, list), "DeploySpec actions should be a list"
 
-    assert (
-        len(deployspec.actions) == 3
-    ), "There should be 6 actions in the sample deployspec.json"
+    assert len(deployspec.actions) == 3, "There should be 6 actions in the sample deployspec.json"
 
     # Test first action spec
-    action_spec = deployspec.actions[0]
+    action_resource = deployspec.actions[0]
 
-    assert isinstance(
-        action_spec, ActionSpec
-    ), "ActionSpec should be an instance of ActionSpec"
-    assert isinstance(action_spec.spec, dict), "ActionSpec spec should be a dict"
+    assert isinstance(action_resource, ActionResource), "ActionResource should be an instance of ActionResource"
+    assert isinstance(action_resource.spec, dict), "ActionResource spec should be a dict"
 
 
 def test_load_deployspec_json_error_handling(test_data_dir, task_payload: TaskPayload):
@@ -109,9 +97,7 @@ def test_load_deployspec_json_error_handling(test_data_dir, task_payload: TaskPa
         assert data is None, "Should return None if deployspec cannot be loaded"
 
 
-def test_load_deployspec_current_directory_no_file(
-    test_data_dir, task_payload: TaskPayload
-):
+def test_load_deployspec_current_directory_no_file(test_data_dir, task_payload: TaskPayload):
     """Test loading from current directory when no deployspec exists."""
     # Use the deployspec_none directory that should not have deployspec files
     file = os.path.join(test_data_dir, "deployspec.none")
@@ -121,9 +107,7 @@ def test_load_deployspec_current_directory_no_file(
     os.makedirs(file, exist_ok=True)
 
     deployspec = load_deployspec(task_payload)
-    assert (
-        deployspec is None
-    ), "Should return None if no deployspec is found in the directory"
+    assert deployspec is None, "Should return None if no deployspec is found in the directory"
 
 
 def test_load_deployspec_invalid_directory(task_payload: TaskPayload):
@@ -136,9 +120,7 @@ def test_load_deployspec_invalid_directory(task_payload: TaskPayload):
     assert deployspec is None, "Should return None for invalid directory path"
 
 
-def test_load_deployspec_default_current_directory(
-    test_data_dir, task_payload: TaskPayload
-):
+def test_load_deployspec_default_current_directory(test_data_dir, task_payload: TaskPayload):
     """Test loading deployspec from current directory (no path specified)."""
 
     # Change to test directory that has deployspec
@@ -155,6 +137,4 @@ def test_load_deployspec_default_current_directory(
     assert deployspec is not None, "Should load deployspec from current directory"
     assert isinstance(deployspec, DeploySpec), "Should return a DeploySpec instance"
 
-    assert (
-        len(deployspec.actions) == 3
-    ), "Should load the correct deployspec from current directory"
+    assert len(deployspec.actions) == 3, "Should load the correct deployspec from current directory"

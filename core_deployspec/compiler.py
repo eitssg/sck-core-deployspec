@@ -52,10 +52,10 @@ from core_framework.constants import (
 from core_db.facter import get_facts
 
 from core_framework.models import (
-    ActionSpec,
+    ActionResource,
     TaskPayload,
     DeploySpec,
-    ActionSpec,
+    ActionResource,
     DeploymentDetails,
 )
 
@@ -147,9 +147,7 @@ def __load_deployspec_file(task_payload: TaskPayload) -> dict[str, DeploySpec]:
     bucket.download_fileobj(Key=package_key, Fileobj=fileobj)
 
     # Reset Buffer Position
-    fileobj.seek(
-        0
-    )  # Reset the pointer to the beginning so we can begin processing the zip
+    fileobj.seek(0)  # Reset the pointer to the beginning so we can begin processing the zip
 
     specs: dict[str, DeploySpec] = {}
 
@@ -185,9 +183,7 @@ def __load_deployspec_file(task_payload: TaskPayload) -> dict[str, DeploySpec]:
 
     # Process deployspec
     if not specs:
-        raise Exception(
-            "Package does not contain any deployspec files, cannot continue"
-        )
+        raise Exception("Package does not contain any deployspec files, cannot continue")
 
     return specs
 
@@ -230,9 +226,7 @@ def __load_deployspec_zip(task_payload: TaskPayload) -> dict[str, DeploySpec]:
         raise ValueError("Package key is required")
 
     # Download file from S3
-    log.info(
-        "Downloading package from storage ({}) ({})".format(bucket_name, package_key)
-    )
+    log.info("Downloading package from storage ({}) ({})".format(bucket_name, package_key))
 
     # Get the storage location
     bucket = MagicS3Client.get_bucket(Region=region, BucketName=bucket_name)
@@ -253,9 +247,7 @@ def __load_deployspec_zip(task_payload: TaskPayload) -> dict[str, DeploySpec]:
     return spec
 
 
-def __process_package_zip(
-    task_payload: TaskPayload, temp_file: tempfile.NamedTemporaryFile
-) -> dict[str, DeploySpec]:
+def __process_package_zip(task_payload: TaskPayload, temp_file: tempfile.NamedTemporaryFile) -> dict[str, DeploySpec]:
     """
     Process the zip package copying content to the artifacts store while extracting the actions
     into a DeploySpec object. (plan, apply, deploy, or teardown)
@@ -288,9 +280,7 @@ def __process_package_zip(
     # This will be returned and added to the task_payload packages
     specs: dict[str, DeploySpec] = {}
 
-    log.debug(
-        "Extracting {} and Uploading artifact to: {}", V_PACKAGE_ZIP, upload_prefix
-    )
+    log.debug("Extracting {} and Uploading artifact to: {}", V_PACKAGE_ZIP, upload_prefix)
 
     bucket = MagicS3Client.get_bucket(Region=bucket_region, BucketName=bucket_name)
 
@@ -325,13 +315,9 @@ def __process_package_zip(
                 elif name.endswith(".json"):
                     upload_data = util.to_json(data)
                 else:
-                    upload_data = util.to_yaml(
-                        data
-                    )  # Default to YAML (*.actions files)
+                    upload_data = util.to_yaml(data)  # Default to YAML (*.actions files)
 
-                bucket.put_object(
-                    Key=key, Body=upload_data, ServerSideEncryption="AES256"
-                )
+                bucket.put_object(Key=key, Body=upload_data, ServerSideEncryption="AES256")
 
             else:
                 data = zipfile_obj.read(name)
@@ -346,14 +332,12 @@ def __process_package_zip(
 
     # Process deployspec
     if not specs:
-        raise Exception(
-            "Package does not contain any deployspec files, cannot continue"
-        )
+        raise Exception("Package does not contain any deployspec files, cannot continue")
 
     return specs
 
 
-def get_accounts_regions(action_spec: ActionSpec) -> tuple[list[str], list[str]]:
+def get_accounts_regions(action_resource: ActionResource) -> tuple[list[str], list[str]]:
     """
     Compile a list of accounts and regions for the action.
 
@@ -362,75 +346,65 @@ def get_accounts_regions(action_spec: ActionSpec) -> tuple[list[str], list[str]]
 
     If no region is specified, then the default region will be used.
 
-    :param action_spec: The action specification to extract accounts and regions from
-    :type action_spec: ActionSpec
+    :param action_resource: The action specification to extract accounts and regions from
+    :type action_resource: ActionResource
     :returns: Tuple containing lists of accounts and regions
     :rtype: tuple[list[str], list[str]]
 
     Examples
     --------
-    >>> action_spec = ActionSpec(
+    >>> action_resource = ActionResource(
     ...     spec={"account": "123456789012", "region": "us-east-1"}
     ... )
-    >>> accounts, regions = get_accounts_regions(action_spec)
+    >>> accounts, regions = get_accounts_regions(action_resource)
     >>> # Returns: (["123456789012"], ["us-east-1"])
     """
-    accounts = (
-        action_spec.spec.get("accounts") or action_spec.spec.get("Accounts") or []
-    )
-    account = action_spec.spec.get("account") or action_spec.spec.get("Account")
+    accounts = action_resource.spec.get("accounts") or action_resource.spec.get("Accounts") or []
+    account = action_resource.spec.get("account") or action_resource.spec.get("Account")
     if account and account not in accounts:
         accounts.append(account)
 
-    regions = action_spec.spec.get("regions") or action_spec.spec.get("Regions") or []
-    region = (
-        action_spec.spec.get("region")
-        or action_spec.spec.get("Region")
-        or util.get_region()
-    )
+    regions = action_resource.spec.get("regions") or action_resource.spec.get("Regions") or []
+    region = action_resource.spec.get("region") or action_resource.spec.get("Region") or util.get_region()
     if region and region not in regions:
         regions.append(region)
 
     return accounts, regions
 
 
-def get_region_account_labels(action_spec: ActionSpec) -> list[str]:
+def get_region_account_labels(action_resource: ActionResource) -> list[str]:
     """
     Generate a unique list of labels for the action specification
     for each account/region permutation.
 
-    :param action_spec: The action specification to generate labels for
-    :type action_spec: ActionSpec
+    :param action_resource: The action specification to generate labels for
+    :type action_resource: ActionResource
     :returns: List of generated labels for account/region combinations
     :rtype: list[str]
 
     Examples
     --------
-    >>> action_spec = ActionSpec(
+    >>> action_resource = ActionResource(
     ...     label="create-vpc",
     ...     spec={"accounts": ["123", "456"], "regions": ["us-east-1", "us-west-2"]}
     ... )
-    >>> labels = get_region_account_labels(action_spec)
+    >>> labels = get_region_account_labels(action_resource)
     >>> # Returns: ["create-vpc-123-us-east-1", "create-vpc-123-us-west-2",
     >>> #           "create-vpc-456-us-east-1", "create-vpc-456-us-west-2"]
     """
-    accounts, regions = get_accounts_regions(action_spec)
+    accounts, regions = get_accounts_regions(action_resource)
 
-    labels = [
-        __get_action_name(action_spec, account, region)
-        for account in accounts
-        for region in regions
-    ]
+    labels = [__get_action_name(action_resource, account, region) for account in accounts for region in regions]
 
     return labels
 
 
-def __get_action_name(action_spec: ActionSpec, account: str, region: str) -> str:
+def __get_action_name(action_resource: ActionResource, account: str, region: str) -> str:
     """
     Generate a unique action name based on the action specification, account, and region.
 
-    :param action_spec: The action specification to generate the name for
-    :type action_spec: ActionSpec
+    :param action_resource: The action specification to generate the name for
+    :type action_resource: ActionResource
     :param account: The AWS account ID for this action
     :type account: str
     :param region: The AWS region for this action
@@ -440,16 +414,14 @@ def __get_action_name(action_spec: ActionSpec, account: str, region: str) -> str
 
     Examples
     --------
-    >>> action_spec = ActionSpec(label="create-vpc")
-    >>> name = __get_action_name(action_spec, "123456789012", "us-east-1")
+    >>> action_resource = ActionResource(label="create-vpc")
+    >>> name = __get_action_name(action_resource, "123456789012", "us-east-1")
     >>> # Returns: "create-vpc-123456789012-us-east-1"
     """
-    return f"{action_spec.label}-{account}-{region}"
+    return f"{action_resource.label}-{account}-{region}"
 
 
-def compile_deployspec(
-    task_payload: TaskPayload, deployspec: DeploySpec
-) -> list[ActionSpec]:
+def compile_deployspec(task_payload: TaskPayload, deployspec: DeploySpec) -> list[ActionResource]:
     """
     Convert deployspec into an actions list.
 
@@ -458,20 +430,20 @@ def compile_deployspec(
     :param deployspec: The deployspec to compile into actions.  If None, it will use the deployspec from the task payload package.
     :type deployspec: DeploySpec | None
     :returns: List of compiled action specifications
-    :rtype: list[ActionSpec]
+    :rtype: list[ActionResource]
     :raises ValueError: If unknown action type is encountered
 
     Examples
     --------
     >>> deployspec = DeploySpec(actions=[
-    ...     ActionSpec(type="create_stack", label="vpc", spec={...})
+    ...     ActionResource(type="create_stack", label="vpc", spec={...})
     ... ])
     >>> actions = compile_deployspec(task_payload, deployspec)
-    >>> # Returns: [ActionSpec(...)]
+    >>> # Returns: [ActionResource(...)]
 
     >>> task_payload = TaskPayload(..., package=PackageDetails(..., deployspec=deployspec))
     >>> actions = compile_deployspec(task_payload)
-    >>> # Returns: [ActionSpec(...)]
+    >>> # Returns: [ActionResource(...)]
     """
     if deployspec is None:
         raise ValueError("Deployspec is required to compile actions")
@@ -481,73 +453,69 @@ def compile_deployspec(
     log.debug("spec_label_map", details=spec_label_map)
 
     # For the actions specified in the deployspec, compile them into a list of actions for the core_execute module
-    compiled_actions: list[ActionSpec] = []
-    for action_spec in deployspec.actions:
-        if not ActionFactory.is_valid_action(action_spec.kind):
-            raise ValueError(f"Unknown action type {action_spec.kind}")
-        compiled_actions.extend(
-            compile_action(action_spec, task_payload, spec_label_map)
-        )
+    compiled_actions: list[ActionResource] = []
+    for action_resource in deployspec.actions:
+        if not ActionFactory.is_valid_action(action_resource.kind):
+            raise ValueError(f"Unknown action type {action_resource.kind}")
+        compiled_actions.extend(compile_action(action_resource, task_payload, spec_label_map))
     return compiled_actions
 
 
-def get_spec_label_map(actions: list[ActionSpec]) -> dict[str, list[str]]:
+def get_spec_label_map(actions: list[ActionResource]) -> dict[str, list[str]]:
 
     spec_label_map: SpecLabelMapType = {}
-    for action_spec in actions:
-        spec_label_map[action_spec.label] = get_region_account_labels(action_spec)
+    for action_resource in actions:
+        spec_label_map[action_resource.label] = get_region_account_labels(action_resource)
     return spec_label_map
 
 
 def compile_action(
-    action_spec: ActionSpec, task_payload: TaskPayload, spec_label_map: SpecLabelMapType
-) -> list[ActionSpec]:
+    action_resource: ActionResource, task_payload: TaskPayload, spec_label_map: SpecLabelMapType
+) -> list[ActionResource]:
     """
     Compile a single action specification into executable actions.
 
-    :param action_spec: The action specification to compile
-    :type action_spec: ActionSpec
+    :param action_resource: The action specification to compile
+    :type action_resource: ActionResource
     :param task_payload: The task payload containing deployment context
     :type task_payload: TaskPayload
     :param spec_label_map: Mapping of spec labels to region/account combinations
     :type spec_label_map: SpecLabelMapType
     :returns: List of compiled action specifications
-    :rtype: list[ActionSpec]
+    :rtype: list[ActionResource]
     :raises ValueError: If required account/region information is missing or invalid
 
     Examples
     --------
-    >>> action_spec = ActionSpec(type="create_stack", label="vpc", spec={...})
-    >>> actions = compile_action(action_spec, task_payload, spec_label_map,
-    ...                         allow_multiple_stacks=True, kind=CreateStackActionSpec)
-    >>> # Returns: [ActionSpec(...)]
+    >>> action_resource = ActionResource(type="create_stack", label="vpc", spec={...})
+    >>> actions = compile_action(action_resource, task_payload, spec_label_map,
+    ...                         allow_multiple_stacks=True, kind=CreateStackActionResource)
+    >>> # Returns: [ActionResource(...)]
     """
-    accounts, regions = get_accounts_regions(action_spec)
+    accounts, regions = get_accounts_regions(action_resource)
 
-    action_list: list[ActionSpec] = []
+    action_list: list[ActionResource] = []
     for account in accounts:
         for region in regions:
-            execute_action = generate_action_command(
-                task_payload, action_spec, spec_label_map, account, region
-            )
+            execute_action = generate_action_command(task_payload, action_resource, spec_label_map, account, region)
             action_list.append(execute_action)
     return action_list
 
 
 def generate_action_command(
     task_payload: TaskPayload,
-    action_spec: ActionSpec,
+    action_resource: ActionResource,
     spec_label_map: SpecLabelMapType,
     account: str,
     region: str,
-) -> ActionSpec:
+) -> ActionResource:
     """
     Generate an executable action command from an action specification.
 
     :param task_payload: The task payload containing deployment context
     :type task_payload: TaskPayload
-    :param action_spec: The action specification to generate command for
-    :type action_spec: ActionSpec
+    :param action_resource: The action specification to generate command for
+    :type action_resource: ActionResource
     :param spec_label_map: Mapping of spec labels to region/account combinations
     :type spec_label_map: SpecLabelMapType
     :param account: The AWS account ID for this action
@@ -555,25 +523,25 @@ def generate_action_command(
     :param region: The AWS region for this action
     :type region: str
     :returns: The generated action specification
-    :rtype: ActionSpec
+    :rtype: ActionResource
     :raises ValueError: If action type is required but not provided
 
     Examples
     --------
-    >>> action_spec = ActionSpec(action="AWS::CreateStack", label="vpc", spec={...})
-    >>> command = generate_action_command(task_payload, action_spec, spec_label_map,
+    >>> action_resource = ActionResource(action="AWS::CreateStack", label="vpc", spec={...})
+    >>> command = generate_action_command(task_payload, action_resource, spec_label_map,
     ...                                  "123456789012", "us-east-1")
-    >>> # Returns: ActionSpec with executable parameters
+    >>> # Returns: ActionResource with executable parameters
     """
 
-    if action_spec.kind is None:
+    if action_resource.kind is None:
         raise ValueError("Action type is required that matches a valid Action model")
 
-    klass = ActionFactory.get_action_class(action_spec.kind)
+    klass = ActionFactory.get_action_class(action_resource.kind)
     if klass is None:
-        raise ValueError(f"Cannot find action class for {action_spec.kind}")
+        raise ValueError(f"Cannot find action class for {action_resource.kind}")
 
-    spec = deepcopy(action_spec.spec)
+    spec = deepcopy(action_resource.spec)
 
     __delkeys(["account", "region", "accounts", "regions", "Accounts", "Regions"], spec)
 
@@ -587,7 +555,7 @@ def generate_action_command(
     # update the path to the bucket deployment details.
     if hasattr(spec, "template_url"):
         spec.template_url = __get_action_template_url(
-            action_spec,
+            action_resource,
             task_payload.actions.bucket_name,
             task_payload.actions.bucket_region,
             task_payload.deployment_details,
@@ -598,15 +566,13 @@ def generate_action_command(
 
     if hasattr(spec, "tags"):
         # Add default tags to all actions
-        spec.tags = __get_tags(
-            action_spec.scope, task_payload.deployment_details, spec.tags
-        )
+        spec.tags = __get_tags(action_resource.scope, task_payload.deployment_details, spec.tags)
 
-    # Validate ActionSpec.  Note, the "Kind" field is automatically updated in generate_action_spec
-    execute_action = klass.generate_action_spec(
+    # Validate ActionResource.  Note, the "Kind" field is automatically updated in generate_action_resource
+    execute_action = klass.generate_action_resource(
         **{
-            "Name": __get_action_name(action_spec, account, region),
-            "DependsOn": __get_depends_on(action_spec, spec_label_map),
+            "Name": __get_action_name(action_resource, account, region),
+            "DependsOn": __get_depends_on(action_resource, spec_label_map),
             "Spec": spec.model_dump(),
         }
     )
@@ -615,7 +581,7 @@ def generate_action_command(
 
 
 def __get_action_template_url(
-    action_spec: ActionSpec,
+    action_resource: ActionResource,
     bucket_name: str,
     bucket_region: str,
     deployment_details: DeploymentDetails,
@@ -623,8 +589,8 @@ def __get_action_template_url(
     """
     Get the template URL for a CloudFormation action.
 
-    :param action_spec: The action specification containing template parameters
-    :type action_spec: ActionSpec
+    :param action_resource: The action specification containing template parameters
+    :type action_resource: ActionResource
     :param bucket_name: The S3 bucket name where templates are stored
     :type bucket_name: str
     :param bucket_region: The AWS region of the S3 bucket
@@ -636,21 +602,17 @@ def __get_action_template_url(
 
     Examples
     --------
-    >>> action_spec = ActionSpec(spec={"template_url": "vpc.yaml"})
-    >>> url = __get_action_template_url(action_spec, "my-bucket", "us-east-1", deployment_details)
+    >>> action_resource = ActionResource(spec={"template_url": "vpc.yaml"})
+    >>> url = __get_action_template_url(action_resource, "my-bucket", "us-east-1", deployment_details)
     >>> # Returns: "s3://my-bucket/artifacts/portfolio/app/branch/build/vpc.yaml"
     """
 
-    key = __getany(
-        action_spec.spec, ["template_url", "TemplateUrl", "template", "Template"]
-    )
+    key = __getany(action_resource.spec, ["template_url", "TemplateUrl", "template", "Template"])
     if key is None:
         return None
-    scope = __get_action_scope(action_spec, deployment_details)
+    scope = __get_action_scope(action_resource, deployment_details)
 
-    return __get_template_url(
-        bucket_name, bucket_region, deployment_details, key, scope
-    )
+    return __get_template_url(bucket_name, bucket_region, deployment_details, key, scope)
 
 
 def __get_template_url(
@@ -722,24 +684,24 @@ def get_context(task_payload: TaskPayload) -> dict:
     return {CONTEXT_ROOT: state}
 
 
-def apply_context(actions: list[ActionSpec], context: dict) -> list[ActionSpec]:
+def apply_context(actions: list[ActionResource], context: dict) -> list[ActionResource]:
     """
     Apply state to the actions list. Uses Jinja Template to render the state.
 
     :param actions: The list of action specifications to render
-    :type actions: list[ActionSpec]
+    :type actions: list[ActionResource]
     :param context: The context dictionary for template rendering
     :type context: dict
     :returns: The rendered actions list with context applied
-    :rtype: list[ActionSpec]
+    :rtype: list[ActionResource]
     :raises ValueError: If unknown action type is encountered in actions list
 
     Examples
     --------
-    >>> actions = [ActionSpec(spec={"StackName": "{{ core.portfolio }}-vpc"})]
+    >>> actions = [ActionResource(spec={"StackName": "{{ core.portfolio }}-vpc"})]
     >>> context = {"core": {"portfolio": "web-services"}}
     >>> rendered = apply_context(actions, context)
-    >>> # Returns: [ActionSpec(spec={"StackName": "web-services-vpc"})]
+    >>> # Returns: [ActionResource(spec={"StackName": "web-services-vpc"})]
     """
 
     actions_list: list[dict[str, Any]] = [a.model_dump() for a in actions]
@@ -753,19 +715,17 @@ def apply_context(actions: list[ActionSpec], context: dict) -> list[ActionSpec]:
         # if the root should be "core" or if the root should be "context".
         # If we change the root to "context", then we need to change the
         # input to template.render(context=context[CONTEXT_ROOT])
-        rendered_contents = renderer.render_string(
-            unrendered_contents, context[CONTEXT_ROOT]
-        )
+        rendered_contents = renderer.render_string(unrendered_contents, context[CONTEXT_ROOT])
 
         action_list = util.from_yaml(rendered_contents)
 
-        # Convert the action list back to ActionSpec objects
+        # Convert the action list back to ActionResource objects
         # Please note that the value of action.kind and action.spec is NOT validated here.
-        actions: list[ActionSpec] = []
+        actions: list[ActionResource] = []
         for action in action_list:
             if isinstance(action, dict):
-                actions.append(ActionSpec(**action))
-            elif isinstance(action, ActionSpec):
+                actions.append(ActionResource(**action))
+            elif isinstance(action, ActionResource):
                 actions.append(action)
             else:
                 raise ValueError(f"Unknown action type {type(action)} in actions list")
@@ -798,9 +758,7 @@ def apply_context(actions: list[ActionSpec], context: dict) -> list[ActionSpec]:
                 error_details.update(
                     {
                         "syntax_error": True,
-                        "error_location": (
-                            f"line {e.lineno}" if e.lineno else "unknown location"
-                        ),
+                        "error_location": (f"line {e.lineno}" if e.lineno else "unknown location"),
                     }
                 )
                 log.error(
@@ -811,9 +769,7 @@ def apply_context(actions: list[ActionSpec], context: dict) -> list[ActionSpec]:
 
             # Log undefined variable errors
             elif isinstance(e, jinja2.UndefinedError):
-                error_details.update(
-                    {"undefined_error": True, "undefined_variable": str(e)}
-                )
+                error_details.update({"undefined_error": True, "undefined_variable": str(e)})
                 log.error("Jinja2 Undefined Variable Error: {}", str(e))
 
             # Log template runtime errors
@@ -836,11 +792,7 @@ def apply_context(actions: list[ActionSpec], context: dict) -> list[ActionSpec]:
 
         # Log the template content for debugging (truncated if too long)
         try:
-            template_preview = (
-                unrendered_contents[:500] + "..."
-                if len(unrendered_contents) > 500
-                else unrendered_contents
-            )
+            template_preview = unrendered_contents[:500] + "..." if len(unrendered_contents) > 500 else unrendered_contents
             error_details["template_preview"] = template_preview
             log.debug("Template content preview: {}", template_preview)
         except:
@@ -849,9 +801,7 @@ def apply_context(actions: list[ActionSpec], context: dict) -> list[ActionSpec]:
         # Log available context for debugging
         if context and CONTEXT_ROOT in context:
             context_preview = (
-                str(context[CONTEXT_ROOT])[:300] + "..."
-                if len(str(context[CONTEXT_ROOT])) > 300
-                else str(context[CONTEXT_ROOT])
+                str(context[CONTEXT_ROOT])[:300] + "..." if len(str(context[CONTEXT_ROOT])) > 300 else str(context[CONTEXT_ROOT])
             )
             error_details["context_preview"] = context_preview
             log.debug("Context preview: {}", context_preview)
@@ -943,12 +893,12 @@ def __apply_syntax_update(parameters: dict | None) -> dict | None:
     return parameters
 
 
-def __get_depends_on(action: ActionSpec, spec_label_map: SpecLabelMapType) -> list:
+def __get_depends_on(action: ActionResource, spec_label_map: SpecLabelMapType) -> list:
     """
     Get the dependency list for an action specification.
 
     :param action: The action specification to get dependencies for
-    :type action: ActionSpec
+    :type action: ActionResource
     :param spec_label_map: Mapping of spec labels to region/account combinations
     :type spec_label_map: SpecLabelMapType
     :returns: List of action labels this action depends on
@@ -956,7 +906,7 @@ def __get_depends_on(action: ActionSpec, spec_label_map: SpecLabelMapType) -> li
 
     Examples
     --------
-    >>> action = ActionSpec(depends_on=["vpc", "security"])
+    >>> action = ActionResource(depends_on=["vpc", "security"])
     >>> deps = __get_depends_on(action, spec_label_map)
     >>> # Returns: ["vpc-123-us-east-1", "security-123-us-east-1"]
     """
@@ -964,18 +914,12 @@ def __get_depends_on(action: ActionSpec, spec_label_map: SpecLabelMapType) -> li
     if not action.depends_on:
         return []
 
-    depends_on: list = [
-        item
-        for sublist in map(lambda name: spec_label_map[name], action.depends_on)
-        for item in sublist
-    ]
+    depends_on: list = [item for sublist in map(lambda name: spec_label_map[name], action.depends_on) for item in sublist]
 
     return depends_on
 
 
-def __get_action_scope(
-    action: ActionSpec, deployment_details: DeploymentDetails
-) -> str:
+def __get_action_scope(action: ActionResource, deployment_details: DeploymentDetails) -> str:
     """
     Determine the deployment scope for an action based on stack name templates.
 
@@ -986,7 +930,7 @@ def __get_action_scope(
     The above will return the scope of SCOPE_APP ('app').
 
     :param action: The action specification to determine scope for
-    :type action: ActionSpec
+    :type action: ActionResource
     :param deployment_details: The deployment details containing scope information
     :type deployment_details: DeploymentDetails
     :returns: The deployment scope (portfolio, app, branch, build)
@@ -994,7 +938,7 @@ def __get_action_scope(
 
     Examples
     --------
-    >>> action = ActionSpec(spec={"stack_name": "{{ core.Portfolio }}-{{ core.App }}-vpc"})
+    >>> action = ActionResource(spec={"stack_name": "{{ core.Portfolio }}-{{ core.App }}-vpc"})
     >>> scope = __get_action_scope(action, deployment_details)
     >>> # Returns: "app"
     """

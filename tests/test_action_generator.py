@@ -1,7 +1,7 @@
 import pytest
 import os
 import core_framework as util
-from core_framework.models import TaskPayload, DeploymentDetails, DeploySpec, ActionSpec
+from core_framework.models import TaskPayload, DeploymentDetails, DeploySpec, ActionResource
 from core_deployspec.compiler import (
     generate_action_command,
     get_spec_label_map,
@@ -55,22 +55,18 @@ def test_load_and_validate_action(task_payload, deployspec: DeploySpec):
 
     assert len(label_map) == 3, "Label Map should contain 3 keys"
 
-    action_spec = deployspec.actions[1]
+    action_resource = deployspec.actions[1]
 
-    accounts, regions = get_accounts_regions(action_spec)
+    accounts, regions = get_accounts_regions(action_resource)
 
-    assert (
-        len(accounts) == 3
-    ), "The test action should contain 3 accounts for the target"
+    assert len(accounts) == 3, "The test action should contain 3 accounts for the target"
     assert len(regions) == 3, "The test action should contain 3 regions for the target"
 
     account = accounts[1]
     region = regions[1]
 
     # Generate the single action for the account/region
-    execute_action = generate_action_command(
-        task_payload, action_spec, label_map, account, region
-    )
+    execute_action = generate_action_command(task_payload, action_resource, label_map, account, region)
 
     # Check if the action is loaded correctly
     assert execute_action.kind == "AWS::DeleteUser"
@@ -85,22 +81,18 @@ def test_generatge_create_stack(task_payload, deployspec: DeploySpec):
     assert len(label_map) == 3, "Label Map should contain 3 keys"
 
     ## Get the create_stack action
-    action_spec = deployspec.actions[2]
+    action_resource = deployspec.actions[2]
 
-    accounts, regions = get_accounts_regions(action_spec)
+    accounts, regions = get_accounts_regions(action_resource)
 
-    assert (
-        len(accounts) == 3
-    ), "The test action should contain 3 accounts for the target"
+    assert len(accounts) == 3, "The test action should contain 3 accounts for the target"
     assert len(regions) == 3, "The test action should contain 3 regions for the target"
 
     account = accounts[1]
     region = regions[1]
 
     # Generate the single action for the account/region
-    execute_action = generate_action_command(
-        task_payload, action_spec, label_map, account, region
-    )
+    execute_action = generate_action_command(task_payload, action_resource, label_map, account, region)
 
     assert execute_action is not None, "Should have an create_stack action"
     assert execute_action.kind == "AWS::CreateStack", "Should be a create_stack action"
