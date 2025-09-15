@@ -2,6 +2,8 @@
 
 A way to get a cloudformation Template to be applied to more than 1 AWS account and Region.  Very convient way to copy and replicate.
 
+> Copilot: See [local instructions](.github/copilot-instructions.md) and [root guidance](../../.github/copilot-instructions.md) for precedence and module rules.
+
 ## Table of Contents
 
 - [Overview](#core-automation-platform)
