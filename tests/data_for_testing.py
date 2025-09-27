@@ -80,9 +80,7 @@ def get_organization(real_aws: bool) -> dict[str, str]:
     return organization
 
 
-def get_client_data(
-    organization: dict[str, str], arguments: dict[str, Any]
-) -> ClientFactsModel:
+def get_client_data(organization: dict[str, str], arguments: dict[str, Any]) -> ClientFactsModel:
     """
     Create and save ClientFactsModel test data.
 
@@ -133,9 +131,7 @@ def get_client_data(
     return cf
 
 
-def get_portfolio_data(
-    client_data: ClientFactsModel, arguments: dict[str, Any]
-) -> PortfolioFactsModel:
+def get_portfolio_data(client_data: ClientFactsModel, arguments: dict[str, Any]) -> PortfolioFactsModel:
     """
     Create and save PortfolioFactsModel test data.
 
@@ -164,9 +160,7 @@ def get_portfolio_data(
     portfolio = model(
         client=client,  # Fixed: use lowercase field names
         portfolio=portfolio_name,  # Fixed: use lowercase field names
-        contacts=[
-            ContactFacts(name="John Doe", email="john.doe@example.com")
-        ],  # Fixed: email domain
+        contacts=[ContactFacts(name="John Doe", email="john.doe@example.com")],  # Fixed: email domain
         approvers=[
             ApproverFacts(
                 name="Jane Doe",
@@ -175,15 +169,9 @@ def get_portfolio_data(
                 sequence=1,
             )
         ],  # Fixed: email
-        project=ProjectFacts(
-            name="my-project", description="my project description", code="MYPRJ"
-        ),
-        bizapp=ProjectFacts(
-            name="my-bizapp", description="my bizapp description", code="MYBIZ"
-        ),
-        owner=OwnerFacts(
-            name="John Doe", email="john.doe@example.com"
-        ),  # Fixed: email domain
+        project=ProjectFacts(name="my-project", description="my project description", code="MYPRJ"),
+        bizapp=ProjectFacts(name="my-bizapp", description="my bizapp description", code="MYBIZ"),
+        owner=OwnerFacts(name="John Doe", email="john.doe@example.com"),  # Fixed: email domain
         domain=f"my-app.{domain_name}",
         tags={
             "BizApp": "MyBizApp",  # Fixed: typo in "BizzApp"
@@ -199,9 +187,7 @@ def get_portfolio_data(
     return portfolio
 
 
-def get_zone_data(
-    client_data: ClientFactsModel, arguments: dict[str, Any]
-) -> ZoneFactsModel:
+def get_zone_data(client_data: ClientFactsModel, arguments: dict[str, Any]) -> ZoneFactsModel:
     """
     Create and save ZoneFactsModel test data.
 
@@ -263,9 +249,7 @@ def get_zone_data(
                             value="192.168.0.0/16",
                             description="Global CIDR 1",
                         ),
-                        SecurityAliasFacts(
-                            type="cidr", value="10.0.0.0/8", description="Global CIDR 2"
-                        ),
+                        SecurityAliasFacts(type="cidr", value="10.0.0.0/8", description="Global CIDR 2"),
                     ]
                 },
                 security_group_aliases={
