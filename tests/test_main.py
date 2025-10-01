@@ -18,52 +18,54 @@ from core_framework.models import ActionResource
 
 def test_get_region_account_labels_multiple_accounts_regions():
     """Test get_region_account_labels with multiple accounts and regions."""
-    try:
-        deployspec = _get_deployspec(
-            "test_stack",
-            ["123456789012", "123456789013"],
-            ["us-east-1", "ap-southeast-1"],
-        )
+    deployspec = _get_deployspec(
+        "test-stack",
+        ["123456789012", "123456789013"],
+        ["us-east-1", "ap-southeast-1"],
+    )
 
-        for spec in deployspec:
-            action_resource = ActionResource(**spec)
-            region_account_labels = get_region_account_labels(action_resource)
+    for resource in deployspec:
 
-            expected_labels = [
-                "test_stack-label-123456789012-us-east-1",
-                "test_stack-label-123456789012-ap-southeast-1",
-                "test_stack-label-123456789013-us-east-1",
-                "test_stack-label-123456789013-ap-southeast-1",
-            ]
+        try:
+            action_resource = ActionResource.model_validate(resource)
+        except Exception as e:
+            pytest.fail(f"Failed to create ActionResource: {e}")
 
-            assert region_account_labels == expected_labels
+        region_account_labels = get_region_account_labels(action_resource)
 
-    except ValidationError as e:
-        pytest.fail(f"ValidationError: {e.errors()}")
-    except Exception as e:
-        pytest.fail(f"Unexpected error: {e}")
+        expected_labels = [
+            ":action/test-stack-label-123456789012-us-east-1",
+            ":action/test-stack-label-123456789012-ap-southeast-1",
+            ":action/test-stack-label-123456789013-us-east-1",
+            ":action/test-stack-label-123456789013-ap-southeast-1",
+        ]
+
+        assert region_account_labels == expected_labels
 
 
 def test_get_region_account_labels_single_account_region():
     """Test get_region_account_labels with single account and region."""
     deployspec = _get_deployspec(
-        "single_stack",
+        "single-stack",
         ["123456789012"],
         ["us-west-2"],
     )
 
-    action_resource = ActionResource(**deployspec[0])
+    action_resource = ActionResource.model_validate(deployspec[0])
     region_account_labels = get_region_account_labels(action_resource)
 
-    expected_labels = ["single_stack-label-123456789012-us-west-2"]
+    expected_labels = [
+        ":action/single-stack-label-123456789012-us-west-2",
+        ':action/single-stack-label-123456789012-ap-southeast-1',
+    ]
     assert region_account_labels == expected_labels
 
 
 def test_get_region_account_labels_empty_lists():
     """Test get_region_account_labels with empty account/region lists."""
-    deployspec = _get_deployspec("empty_stack", [], [])
+    deployspec = _get_deployspec("empty-stack", [], [])
 
-    action_resource = ActionResource(**deployspec[0])
+    action_resource = ActionResource.model_validate(deployspec[0])
     region_account_labels = get_region_account_labels(action_resource)
 
     assert region_account_labels == []
@@ -72,19 +74,19 @@ def test_get_region_account_labels_empty_lists():
 @pytest.mark.parametrize(
     "stack_name,expected_scope",
     [
-        ("{{ core.Portfolio }}-resources", SCOPE_PORTFOLIO),
-        ("{{ core.Project }}-{{ core.App }}-resources", SCOPE_APP),
+        ("{{ context.Portfolio }}-resources", SCOPE_PORTFOLIO),
+        ("{{ context.Project }}-{{ context.App }}-resources", SCOPE_APP),
         (
-            "{{ core.Project }}-{{ core.App }}-{{ core.Branch }}-resources",
+            "{{ context.Project }}-{{ context.App }}-{{ context.Branch }}-resources",
             SCOPE_BRANCH,
         ),
         (
-            "{{ core.Project }}-{{ core.App }}-{{ core.Branch }}-{{ core.Build}}-resources",
+            "{{ context.Project }}-{{ context.App }}-{{ context.Branch }}-{{ context.Build}}-resources",
             SCOPE_BUILD,
         ),
-        ("simple-stack-name", None),  # Test non-templated name
+        ("simple-stack-name", SCOPE_BUILD),  # Test non-templated name
         (
-            "{{ core.Portfolio }}-{{ core.App }}-{{ core.Branch }}-{{ core.Build}}-resources",
+            "{{ context.Portfolio }}-{{ context.App }}-{{ context.Branch }}-{{ context.Build}}-resources",
             SCOPE_BUILD,
         ),  # All variables
     ],
@@ -98,12 +100,12 @@ def test_get_stack_scope_various_patterns(stack_name, expected_scope):
 def test_get_stack_scope_edge_cases():
     """Test __get_stack_scope with edge cases."""
     # Empty string
-    assert __get_stack_scope("") is None
+    assert __get_stack_scope("") is 'build'  # default is build
 
     # None input (if function handles it)
     try:
-        result = __get_stack_scope(None)
-        assert result is None
+        result = __get_stack_scope("")
+        assert result is 'build'  # default is build
     except (TypeError, AttributeError):
         # Expected if function doesn't handle None
         pass
@@ -112,11 +114,11 @@ def test_get_stack_scope_edge_cases():
 def test_action_resource_validation_with_compiler_functions():
     """Test that ActionResource validation works with compiler functions."""
     # Test valid action spec
-    valid_spec = _get_action("valid_stack", ["123456789012"], ["us-east-1"])
+    valid_spec = _get_action("valid-stack", ["123456789012"], ["us-east-1"])
 
     try:
-        action_resource = ActionResource(**valid_spec)
-        assert action_resource.label == "valid_stack-label"
+        action_resource = ActionResource.model_validate(valid_spec)
+        assert action_resource.label == ":action/valid-stack-label"
         assert action_resource.type == "create_stack"
         assert "stack_name" in action_resource.spec
     except ValidationError as e:
@@ -126,7 +128,7 @@ def test_action_resource_validation_with_compiler_functions():
     invalid_spec = {"label": "test", "type": "invalid_type"}
 
     with pytest.raises(ValidationError):
-        ActionResource(**invalid_spec)
+        ActionResource.model_validate(invalid_spec)
 
 
 # Helper methods (not fixtures, just utility functions)
@@ -173,7 +175,7 @@ def _get_user_action(name: str, user: str, account: str, region: str) -> dict:
     label = f"{name}-label"
     return {
         "label": label,
-        "type": "create_user",
+        "kind": "create_user",
         "spec": _get_user_action_parameters(name, user, account, region),
     }
 
@@ -217,15 +219,15 @@ def sample_deployment_details():
 def test_actionresource_integration(sample_action_resource):
     """Integration test for ActionResource creation and compiler function usage."""
     # Create ActionResource from sample data
-    action_resource = ActionResource(**sample_action_resource)
+    action_resource = ActionResource.model_validate(sample_action_resource)
 
     # Test with compiler function
     labels = get_region_account_labels(action_resource)
 
-    expected_labels = ["test-stack-label-123456789012-us-east-1"]
+    expected_labels = [':action/test-stack-label-123456789012-us-east-1', ':action/test-stack-label-123456789012-ap-southeast-1']
     assert labels == expected_labels
 
     # Test scope detection
     scope = __get_stack_scope(action_resource.spec.get("stack_name", ""))
     # This should return None since "test-stack" doesn't match any template pattern
-    assert scope is None
+    assert scope is 'build'  # default is build

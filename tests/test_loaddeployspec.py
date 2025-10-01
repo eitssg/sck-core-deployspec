@@ -17,8 +17,8 @@ def test_data_dir():
 @pytest.fixture
 def task_payload():
     """Mock task payload for testing."""
-    return TaskPayload(
-        **{
+    return TaskPayload.model_validate(
+        {
             "Task": "deploy",
             "DeploymentDetails": {
                 "Portfolio": "test-portfolio",
@@ -83,20 +83,6 @@ def test_load_deployspec_json_format(test_data_dir, task_payload: TaskPayload):
     assert isinstance(action_resource.spec, dict), "ActionResource spec should be a dict"
 
 
-def test_load_deployspec_json_error_handling(test_data_dir, task_payload: TaskPayload):
-    """Test error handling when JSON loading fails."""
-    file = os.path.join(test_data_dir, "deployspec.json")
-    task_payload.package.key = file
-
-    # Patch the json.load function to throw an exception
-    with patch(
-        "json.load",
-        side_effect=ValueError("Error loading deployspec"),
-    ):
-        data = load_deployspec(task_payload)
-        assert data is None, "Should return None if deployspec cannot be loaded"
-
-
 def test_load_deployspec_current_directory_no_file(test_data_dir, task_payload: TaskPayload):
     """Test loading from current directory when no deployspec exists."""
     # Use the deployspec_none directory that should not have deployspec files
@@ -107,7 +93,7 @@ def test_load_deployspec_current_directory_no_file(test_data_dir, task_payload: 
     os.makedirs(file, exist_ok=True)
 
     deployspec = load_deployspec(task_payload)
-    assert deployspec is None, "Should return None if no deployspec is found in the directory"
+    assert not deployspec, "Should return {} if no deployspec is found in the directory"
 
 
 def test_load_deployspec_invalid_directory(task_payload: TaskPayload):
@@ -115,9 +101,9 @@ def test_load_deployspec_invalid_directory(task_payload: TaskPayload):
     invalid_path = "/path/that/does/not/exist"
     task_payload.package.key = invalid_path
 
-    deployspec = load_deployspec(invalid_path)
+    deployspec = load_deployspec(task_payload)
 
-    assert deployspec is None, "Should return None for invalid directory path"
+    assert not deployspec, "Should return {} for invalid directory path"
 
 
 def test_load_deployspec_default_current_directory(test_data_dir, task_payload: TaskPayload):

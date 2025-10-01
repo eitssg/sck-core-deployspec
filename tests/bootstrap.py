@@ -26,11 +26,11 @@ def bootstrap_dynamo():
     assert host == "http://localhost:8000", "DYNAMODB_HOST must be set to http://localhost:8000"
 
     try:
-        client = util.get_client()
+        client = util.get_client() or "core"
 
-        if ClientFactsFactory.exists(client):
-            ClientFactsFactory.delete_table(client, wait=True)
-        ClientFactsFactory.create_table(client, wait=True)
+        if ClientFactsFactory.exists():
+            ClientFactsFactory.delete_table(wait=True)
+        ClientFactsFactory.create_table(wait=True)
 
         if ZoneFactsFactory.exists(client):
             ZoneFactsFactory.delete_table(client, wait=True)

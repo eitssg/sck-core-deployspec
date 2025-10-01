@@ -32,7 +32,7 @@ from core_db.registry.zone import (
     ProxyFacts,
 )
 
-from .bootstrap import *
+from .bootstrap import *  # noqa: F403, F401
 
 
 def get_organization(real_aws: bool) -> dict[str, str]:
@@ -153,12 +153,11 @@ def get_portfolio_data(client_data: ClientFactsModel, arguments: dict[str, Any])
     portfolio_name = arguments["portfolio"]
 
     # Fixed: Use consistent attribute access - use lowercase attributes
-    domain_name = client_data.Domain  # Fixed: use lowercase
-    client = client_data.Client  # Fixed: use lowercase
+    domain_name = client_data.domain  # Fixed: use lowercase
+    client = client_data.client  # Fixed: use lowercase
 
     model = PortfolioFactsFactory.get_model(client)
     portfolio = model(
-        client=client,  # Fixed: use lowercase field names
         portfolio=portfolio_name,  # Fixed: use lowercase field names
         contacts=[ContactFacts(name="John Doe", email="john.doe@example.com")],  # Fixed: email domain
         approvers=[
@@ -203,16 +202,14 @@ def get_zone_data(client_data: ClientFactsModel, arguments: dict[str, Any]) -> Z
     >>> zone_facts = get_zone_data(client_facts, {})
     """
     # Fixed: Use lowercase attribute access
-    automation_account_id = client_data.AutomationAccount
-    automation_account_name = client_data.OrganizationAccount
-    client = client_data.Client  # Fixed: use lowercase field names
+    automation_account_id = client_data.automation_account
+    automation_account_name = client_data.organization_account
+    client = client_data.client  # Fixed: use lowercase field names
 
     model = ZoneFactsFactory.get_model(client)
     zone = model(
-        client=client_data.Client,  # Fixed: use lowercase field names
         zone="my-automation-service-zone",
         account_facts=AccountFacts(  # Fixed: use lowercase field names
-            client=client_data.Client,
             aws_account_id=automation_account_id,
             organizational_unit="PrimaryUnit",
             account_name=automation_account_name,
@@ -280,6 +277,7 @@ def get_zone_data(client_data: ClientFactsModel, arguments: dict[str, Any]) -> Z
 
 
 def get_app_data(
+    client_data: ClientFactsModel,
     portfolio_data: PortfolioFactsModel,
     zone_data: ZoneFactsModel,
     arguments: dict[str, Any],
@@ -307,17 +305,16 @@ def get_app_data(
     # The client/portfolio is where this BizApp that this Deployment is for.
     # The Zone is where this BizApp component will be deployed.
 
-    client = portfolio_data.Client
-    portfolio = portfolio_data.Portfolio
+    client = client_data.client
+    portfolio = portfolio_data.portfolio
     app = arguments["app"]
-
-    client_portfolio_key = f"{client}:{portfolio}"
 
     model = AppFactsFactory.get_model(client)
     app_facts = model(
-        client_portfolio=client_portfolio_key,
+        portfolio=portfolio,
+        app=app,
         app_regex=f"^prn:{portfolio}:{app}:.*:.*$",
-        zone=zone_data.Zone,
+        zone=zone_data.zone,
         name="test application",
         environment="prod",
         image_aliases={"image1": "awsImageID1234234234"},
@@ -332,9 +329,7 @@ def get_app_data(
     return app_facts
 
 
-def initialize(
-    arguments: dict[str, Any],
-) -> tuple[ClientFactsModel, ZoneFactsModel, PortfolioFactsModel, AppFactsModel]:
+def initialize(arguments: dict[str, Any]) -> tuple[ClientFactsModel, ZoneFactsModel, PortfolioFactsModel, AppFactsModel]:
     """
     Initialize all test data for deployspec testing.
 
@@ -351,14 +346,12 @@ def initialize(
     >>> args = {"client": "acme", "portfolio": "core", "app": "api"}
     >>> client_data, zone_data, portfolio_data, app_data = initialize(args)
     """
-    if not bootstrap_dynamo():
-        raise Exception("Failed to bootstrap DynamoDB")
 
     org_data = get_organization(False)
 
     client_data: ClientFactsModel = get_client_data(org_data, arguments)
     zone_data: ZoneFactsModel = get_zone_data(client_data, arguments)
     portfolio_data: PortfolioFactsModel = get_portfolio_data(client_data, arguments)
-    app_data: AppFactsModel = get_app_data(portfolio_data, zone_data, arguments)
+    app_data: AppFactsModel = get_app_data(client_data, portfolio_data, zone_data, arguments)
 
     return client_data, zone_data, portfolio_data, app_data

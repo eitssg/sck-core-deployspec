@@ -5,7 +5,6 @@ from core_framework.models import (
     TaskPayload,
     DeploymentDetails,
     DeploySpec,
-    ActionResource,
 )
 from core_deployspec.compiler import (
     generate_action_command,
@@ -20,7 +19,7 @@ from core_deployspec.compiler import (
 def task_payload():
     return TaskPayload(
         Task="deploy",
-        deployment_details=DeploymentDetails(
+        DeploymentDetails=DeploymentDetails(
             Client="test_client",
             Environment="test_env",
             Portfolio="test_portfolio",
@@ -49,14 +48,14 @@ def test_get_region_account_labels(deployspec: DeploySpec):
 
     assert len(label_map) == 3
 
-    assert "test1-create-user" in label_map
+    assert "test-namespace:action/test1-create-user" in label_map
 
 
-def test_load_and_validate_action(task_payload, deployspec: DeploySpec):
+def test_load_and_validate_action(task_payload: TaskPayload, deployspec: DeploySpec):
 
     # Load the action from the deployspec file
 
-    label_map = get_spec_label_map(deployspec)
+    label_map = get_spec_label_map(deployspec.actions)
 
     assert len(label_map) == 3, "Label Map should contain 3 keys"
 
@@ -81,11 +80,11 @@ def test_load_and_validate_action(task_payload, deployspec: DeploySpec):
 
 def test_generatge_create_stack(task_payload, deployspec: DeploySpec):
 
-    label_map = get_spec_label_map(deployspec)
+    label_map = get_spec_label_map(deployspec.actions)
 
     assert len(label_map) == 3, "Label Map should contain 3 keys"
 
-    ## Get the create_stack action
+    # Get the create_stack action
     action_resource = deployspec.actions[2]
 
     accounts, regions = get_accounts_regions(action_resource)
@@ -107,9 +106,9 @@ def test_generatge_create_stack(task_payload, deployspec: DeploySpec):
 
     # make sure the path of our template was fixed
     assert (
-        "test_client-core-automation-ap-southeast-1\\artefacts\\test_portfolio\\test_app\\test-branch\\test_build\\"
+        "test-client-automation-ap-southeast-1\\artefacts\\test_portfolio\\test_app\\test-branch\\test_build\\"
         in spec["TemplateUrl"]
     )
 
     # Did the translation work?
-    assert spec["StackParameters"]["OtherParam"] == '{{ "portfolio/name" | lookup }}'
+    assert spec["StackParameters"]["OtherParam"] == '{{ "context/Scope" | lookup }}'

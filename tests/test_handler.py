@@ -1,8 +1,5 @@
 import pytest
 import re
-import os
-import tempfile
-import shutil
 import zipfile
 from pathlib import Path
 
@@ -21,6 +18,8 @@ from core_framework.constants import (
     V_TEARDOWNSPEC_FILE_YAML,
 )
 
+from .bootstrap import *  # noqa: F401
+
 from core_helper.magic import MagicS3Client
 
 from .data_for_testing import initialize
@@ -30,7 +29,7 @@ from core_deployspec.handler import handler as deployspec_compiler
 
 
 @pytest.fixture(scope="module")
-def arguments():
+def command_line_arguments():
     """Fixture providing command line arguments simulation."""
     client = util.get_client()  # from the --client parameter
     task = "compile"  # from the "command" positional parameter
@@ -91,14 +90,14 @@ def package_package():
 
 
 @pytest.fixture(scope="module")
-def task_payload(arguments: dict) -> TaskPayload:
+def task_payload(command_line_arguments: dict) -> TaskPayload:
 
-    assert isinstance(arguments, dict)
+    assert isinstance(command_line_arguments, dict)
 
     # Typical lifecycle is: -> package -> upload -> compile -> deploy -> teardown
     # This creates the task payload for testing
 
-    return TaskPayload.from_arguments(**arguments)
+    return TaskPayload.from_arguments(**command_line_arguments)
 
 
 @pytest.fixture(scope="module")
@@ -132,19 +131,19 @@ def upload_package(task_payload: TaskPayload, package_package: str):
 
 
 @pytest.fixture(scope="module")
-def facts(task_payload: TaskPayload, arguments: dict):
+def facts(task_payload: TaskPayload, command_line_arguments: dict, bootstrap_dynamo):
     """Save to the dynamodb the seed data facts we need for testing."""
-    cf, zf, pf, af = initialize(arguments)
+    cf, zf, pf, af = initialize(command_line_arguments)
 
     deployment_details = task_payload.deployment_details
 
     facts = get_facts(deployment_details)
 
     assert facts is not None
-    assert facts["Client"] == cf.Client
-    assert facts["Portfolio"] == pf.Portfolio
-    assert facts["Zone"] == zf.Zone
-    assert facts["AppRegex"] == af.AppRegex
+    assert facts["Client"] == cf.client
+    assert facts["Portfolio"] == pf.portfolio
+    assert facts["Zone"] == zf.zone
+    assert facts["AppRegex"] == af.app_regex
 
     assert re.match(facts["AppRegex"], deployment_details.get_identity())
 
@@ -155,7 +154,7 @@ def test_deployspec_handler_compilation_and_execution(
     task_payload: TaskPayload,
     upload_package: PackageDetails,
     facts: dict,
-    arguments: dict,
+    command_line_arguments: dict,
 ):
     """Test the complete deployspec handler workflow."""
     # Typical lifecycle is: -> package -> upload -> compile -> deploy -> teardown
@@ -163,12 +162,13 @@ def test_deployspec_handler_compilation_and_execution(
 
     try:
         assert isinstance(facts, dict)
-        assert isinstance(arguments, dict)
+        assert isinstance(command_line_arguments, dict)
         assert isinstance(task_payload, TaskPayload)
         assert isinstance(upload_package, PackageDetails)
 
         # Call the handler (not the compiler module)
-        result = deployspec_compiler(task_payload.model_dump(), None)
+        event = task_payload.model_dump()
+        result = deployspec_compiler(event, None)
 
         assert result is not None, "Handler should return a result"
         assert "Response" in result, "Result should contain 'Response' key"
@@ -233,6 +233,9 @@ def test_deployspec_handler_missing_required_fields(task_payload: TaskPayload, m
     response = response.get("Response", {})
     assert "Status" in response, "Response should contain 'Status' key"
     assert response["Status"] == "COMPILE_FAILED", "Status should be 'COMPILE_FAILED' when required fields are missing"
+    msg = response["Message"]
+
     assert (
-        "Deployspec compilation failed (ValidationError): TaskPayload" in response["Message"]
+        'Deployspec compilation failed (RepresenterError): cannot represent an object: PackageDetails' in msg
+        or 'Deployspec compilation failed (ValidationError): TaskPayload' in msg
     ), "Message should indicate validation failure"

@@ -1,27 +1,27 @@
-- label: test1-create-user
-  type: aws.create_user
+- label: "test-namespace:action/test1-create-user"
+  kind: aws.create_user
   spec:
     user_name: bob
     accounts: ["123456789012", "123456789013", "123456789014"]
     regions: ["us-east-1", "us-west-2"]
   depends_on: []
-- label: test1-delete-user
-  type: aws.delete_user
+- label: "test-namespace:action/test1-delete-user"
+  kind: aws.delete_user
   spec:
     user_name: bob
     accounts: ["123456789012", "123456789013", "123456789014"]
     regions: ["us-east-1", "us-west-2"]
-  depends_on: test1-create-user
-- label: test1-create-stack
-  type: create_stack
+  depends_on: "test-namespace:action/test1-create-user"
+- label: "test-namespace:action/test1-create-stack"
+  kind: create_stack
   spec:
-    stack_name: "{{ Portfolio }}-stack-{{ App }}-{{ BranchShortName }}-{{ Build }}"
+    stack_name: "{{ context.Portfolio }}-stack-{{ context.App }}-{{ context.BranchShortName }}-{{ context.Build }}"
     template: template.yaml
     parameters:
       build: 12345
-      BucketName: "{{ ArtefactsBucketName }}"
-      Portfolio: "{{ Portfolio }}"
-      OtherParam: "{{ portfolio.name }}"
+      BucketName: "{{ context.ArtefactsBucketName }}"
+      Portfolio: "{{ context.Portfolio }}"
+      OtherParam: "{{ context.Scope }}"
     accounts:
       - "123456789012"
       - "123456789013"

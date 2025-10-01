@@ -12,7 +12,7 @@ import traceback
 import core_logging as log
 
 from core_framework.status import COMPILE_FAILED, COMPILE_COMPLETE, COMPILE_IN_PROGRESS
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from .compiler import (
     apply_context,
@@ -44,17 +44,20 @@ def handler(event: dict, context: Any | None) -> dict:
 
     Examples
     --------
-    >>> event = {
-    ...     "deployment_details": {...},
-    ...     "package": {"bucket_name": "my-bucket", "key": "package.zip"},
-    ...     "task": "deploy"
-    ... }
-    >>> response = handler(event, None)
-    >>> # Returns: {"TaskResponse": {"status": "COMPILE_COMPLETE", ...}}
+
+        >>> # Example event
+        event = {
+           "deployment_details": {...},
+           "package": {"bucket_name": "my-bucket", "key": "package.zip"},
+           "task": "deploy"
+        }
+        response = handler(event, None)
+        # Returns: {"TaskResponse": {"status": "COMPILE_COMPLETE", ...}}
+
     """
 
     try:
-        task_payload = TaskPayload(**event)
+        task_payload = TaskPayload.model_validate(event)
         log.set_correlation_id(task_payload.correlation_id)
 
         deployment_details = task_payload.deployment_details
@@ -67,10 +70,10 @@ def handler(event: dict, context: Any | None) -> dict:
         context_data = get_context(task_payload)
 
         # Read all the deployspecs from the task payload package
-        specs = load_deployspec(task_payload)
+        deployspec = load_deployspec(task_payload, context_data)
 
         compilation_summary = {
-            "SpecsFound": list(specs.keys()),
+            "SpecsFound": list(deployspec.keys()),
             "SpecsCompiled": [],
             "TotalActionsGenerated": 0,
             "CompilationStatus": "success",
@@ -81,26 +84,22 @@ def handler(event: dict, context: Any | None) -> dict:
         log.debug("Compiling deployspecs")
 
         # Compile all deployspecs in the package (deploy, teardown, plan, apply)
-        for task, spec in specs.items():
+        for task, spec in deployspec.items():
 
             # Create a new task-specific payload by copying the original
-            task_specific_payload = TaskPayload(**task_payload.model_dump())
+            task_specific_payload = TaskPayload.model_validate(task_payload.model_dump())
             task_specific_payload.set_task(task)
             task_payloads.append(task_specific_payload)  # Fixed: append the task_specific_payload
 
             log.debug(f"Processing task: {task}", details=spec.model_dump())
 
-            # Apply the context and finalize output
-            spec.actions = apply_context(spec.actions, context_data)
-
             # Compile the deployspec into actions
             actions: list[ActionResource] = compile_deployspec(task_specific_payload, spec)
 
-            log.debug("Finalizing Templates. Jinja2 templating.")
-
+            # Safe actions to S3 for the executor to pick up
             save_actions(task_specific_payload, actions)
 
-            # Save state (progressive commits)
+            # Save state (progressive execution checkpoint)
             save_state(task_specific_payload, context_data)
 
             # Update compilation summary
@@ -140,19 +139,22 @@ def handler(event: dict, context: Any | None) -> dict:
 
             # Add detailed validation info
             for error in e.errors():
+
+                input_data = error.get("input", "N/A")
+                input_data = __normalize_attributes(input_data)
                 validation_errors.append(
                     {
                         "Field": " → ".join(str(loc) for loc in error.get("loc", [])),
                         "Message": error.get("msg", ""),
                         "Type": error.get("type", ""),
-                        "Input": error.get("input", "N/A"),
+                        "Input": input_data,
                     }
                 )
 
         else:
             message = f"Deployspec compilation failed ({type(e).__name__}): {str(e)}"
 
-        error_details = {"ErrorMessage": message, "CompilationStatus": "failed"}
+        error_details: dict[str, Any] = {"ErrorMessage": message, "CompilationStatus": "failed"}
 
         try:
             if validation_errors:
@@ -180,3 +182,27 @@ def handler(event: dict, context: Any | None) -> dict:
                 "ErrorDetails": error_details,
             }
         }
+
+
+def __normalize_attributes(input_data: Any) -> Any:
+    """
+    Normalize attributes for better readability in error reports.
+
+    :param input_data: The input data to normalize
+    :type input_data: Any
+    :returns: Normalized input data
+    :rtype: Any
+    """
+    if isinstance(input_data, (str, int, float, bool)) or input_data is None:
+        return input_data
+    if isinstance(input_data, list):
+        return [__normalize_attributes(item) for item in input_data]
+    if isinstance(input_data, BaseModel):
+        return input_data.model_dump()
+    elif isinstance(input_data, dict):
+        return_data = {}
+        for key, value in input_data.items():
+            return_data[key] = __normalize_attributes(value)
+        return return_data
+
+    return input_data

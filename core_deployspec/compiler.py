@@ -1,21 +1,27 @@
-"""Description: Compile a deployspec package into actions and templates.
+"""
+Compile a deployspec package into actions and templates.
 
-- Extracts package files to a location in S3
-- Parses and compiles the package deployspec (deployspec.yml)
-- Uploads actions to S3
+This module provides utilities to:
+    - Extract package files to a location in S3
+    - Parse and compile the package deployspec (deployspec.yml)
+    - Upload actions to S3
+
+All docstrings use Google-style for Sphinx/Napoleon compatibility.
 """
 
-from typing import Any
+from typing import Any, Callable, Tuple
 
 import io
 import os
 import re
 import zipfile as zip
 import tempfile
-
+import jinja2
 import core_logging as log
 
 import core_framework as util
+from core_framework.common import SupportsRead
+
 from copy import deepcopy
 
 from core_execute.actionlib.factory import ActionFactory
@@ -52,83 +58,179 @@ from core_framework.constants import (
 from core_db.facter import get_facts
 
 from core_framework.models import (
+    ActionMetadata,
     ActionResource,
+    ActionSpec,
     TaskPayload,
     DeploySpec,
-    ActionResource,
     DeploymentDetails,
 )
 
-from core_helper.magic import MagicS3Client, SeekableStreamWrapper
+from core_helper.magic import MagicS3Client
+from ruamel import yaml
 
 
 SpecLabelMapType = dict[str, list[str]]
 
-CONTEXT_ROOT = "core"
-
-spec_mapping = {
-    V_DEPLOYSPEC_FILE_YAML: (util.read_yaml, TASK_DEPLOY),
-    V_DEPLOYSPEC_FILE_JSON: (util.read_json, TASK_DEPLOY),
-    V_PLANSPEC_FILE_YAML: (util.read_yaml, TASK_PLAN),
-    V_PLANSPEC_FILE_JSON: (util.read_json, TASK_PLAN),
-    V_APPLYSPEC_FILE_YAML: (util.read_yaml, TASK_APPLY),
-    V_APPLYSPEC_FILE_JSON: (util.read_json, TASK_APPLY),
-    V_TEARDOWNSPEC_FILE_YAML: (util.read_yaml, TASK_TEARDOWN),
-    V_TEARDOWNSPEC_FILE_JSON: (util.read_json, TASK_TEARDOWN),
-}
+CONTEXT_ROOT = "context"
 
 
-def load_deployspec(task_payload: TaskPayload) -> dict[str, DeploySpec]:
+def __read_yaml_with_context(stream: SupportsRead, context: dict[str, Any]) -> list[dict[str, Any]]:
+    """
+    Read a YAML stream, render it with Jinja2 using the provided context, and return as a list of dicts.
+
+    Args:
+        stream: A readable stream containing YAML data.
+        context: Dictionary for Jinja2 rendering.
+
+    Returns:
+        List of dictionaries parsed from the rendered YAML.
+    """
+    renderer = Jinja2Renderer()
 
     try:
+        # Because Jinja2 cannot work with a stream, we need to read the stream into a string first
+        yaml_data = stream.read().decode("utf-8")
+    except Exception as e:
+        log.error("Error reading YAML stream: {}", str(e))
+        raise e
+
+    try:
+        data = renderer.render_string(yaml_data, context)
+    except Exception as e:
+        log.error("Error reading YAML with context: {}", str(e))
+        data = yaml_data
+
+    try:
+        rv: dict[str, Any] | list[dict[str, Any]] = util.from_yaml(data)
+        if isinstance(rv, list):
+            return rv
+        return [rv]
+    except Exception as e:
+        log.error("Error parsing YAML data: {}", str(e))
+        raise e
+
+
+def __read_json_with_context(stream: SupportsRead, context: dict[str, Any]) -> list[dict[str, Any]]:
+    """
+    Read a JSON stream, render it with Jinja2 using the provided context, and return as a list of dicts.
+
+    Args:
+        stream: A readable stream containing JSON data.
+        context: Dictionary for Jinja2 rendering.
+
+    Returns:
+        List of dictionaries parsed from the rendered JSON.
+    """
+    renderer = Jinja2Renderer()
+
+    try:
+        json_data = stream.read().decode("utf-8")
+    except Exception as e:
+        log.error("Error reading JSON stream: {}", str(e))
+        raise e
+
+    try:
+        data = renderer.render_string(json_data, context)
+    except Exception as e:
+        log.error("Error reading JSON with context: {}", str(e))
+        data = json_data
+
+    try:
+        rv: dict[str, Any] = util.from_json(data)
+        if isinstance(rv, list):
+            return rv
+        return [rv]
+    except Exception as e:
+        log.error("Error parsing JSON data: {}", str(e))
+        raise e
+
+
+def __get_preprocessor(name: str) -> Tuple[str | None, Callable | None]:
+
+    for task in ["deploy", "plan", "apply", "teardown"]:
+
+        if name.startswith(task):
+            if name.endswith(("yaml", "yml", "yaml.j2", "yml.j2")):
+                return task, __read_yaml_with_context
+            if name.endswith(("json", "json.j2")):
+                return task, __read_json_with_context
+            return task, None
+
+    return None, None
+
+
+def load_deployspec(task_payload: TaskPayload, context: dict[str, Any] | None = None) -> dict[str, DeploySpec]:
+    """
+    Load a deployspec from a package, handling both zip and single-file formats.
+
+    Args:
+        task_payload: The task payload containing package and deployment details.
+        context: Dictionary for Jinja2 rendering.
+
+    Returns:
+        Dictionary of deployment specifications keyed by task type.
+
+    Raises:
+        ValueError: If package key is missing or unsupported.
+
+    Examples:
+        This example show a typical Task Payload for a single deployspec file.
+
+    >>> task_payload = TaskPayload.model_validate({
+        "package": {
+            "bucket_name": "my-package-bucket",
+            "bucket_region": "us-east-1",
+            "key": "deployments/package.zip"
+        }
+    })
+    specs = load_deployspec(task_payload, context)
+    # Returns: {"deployspec.yaml": DeploySpec(...)}
+
+    You may have more than one deployspec file in a zip package.  The file is extrated from the
+    zip file and uploaded to the artefacts bucket.
+
+    The deployspec.yaml file is a Jinja2 templated YAML file that defines the deployment actions
+    and will be rendered using the provided context.
+
+    """
+    try:
+        if context is None:
+            context = {}
 
         package_key = task_payload.package.key
         if not package_key:
             raise ValueError("Package key is required to load deployspec")
-
         if package_key.lower().endswith(".zip"):
-            return __load_deployspec_zip(task_payload)
+            return __load_deployspec_zip(task_payload, context)
         else:
-            return __load_deployspec_file(task_payload)
-
+            return __load_deployspec_file(task_payload, context)
     except Exception as e:
         log.error("Error loading deployspec: {}", str(e))
-        return None
+        return {}
 
 
-def __load_deployspec_file(task_payload: TaskPayload) -> dict[str, DeploySpec]:
+def __load_deployspec_file(task_payload: TaskPayload, context: dict[str, Any]) -> dict[str, DeploySpec]:
     """
-    Process package for single file.
+    Process a package for a single deployspec file (YAML or JSON).
 
-    Package details will contain the location of the deployspec file.
-    This routine will read the file and process it.
+    Args:
+        task_payload: The task payload containing package and deployment details.
+        context: Dictionary for Jinja2 rendering.
 
-    It will return the deployment specifications as an index of tasks.
+    Returns:
+        Dictionary of deployment specifications keyed by task type.
 
-    :param task_payload: The task payload containing package and deployment details
-    :type task_payload: TaskPayload
-    :returns: Dictionary of deployment specifications keyed by task type
-    :rtype: dict[str, DeploySpec]
-    :raises ValueError: If package key is required but not provided
+    Raises:
+        ValueError: If the deployspec file type is unsupported or missing.
 
-    Examples
-    --------
-    >>> task_payload = TaskPayload(
-    ...     package=PackageDetails(
-    ...         bucket_name="my-bucket",
-    ...         bucket_region="us-east-1",
-    ...         key="deployments/package.zip"
-    ...     )
-    ... )
-    >>> specs = load_deployspec(task_payload)
-    >>> # Returns: {"deploy": DeploySpec(...), "plan": DeploySpec(...)}
     """
     package_key = task_payload.package.key
 
-    if package_key.lower().endswith(".yaml") or package_key.lower().endswith(".yml"):
+    if package_key.lower().endswith((".yaml", ".yml", ".yaml.j2", ".yml.j2")):
         mimetype = "application/yaml"
 
-    elif package_key.lower().endswith(".json"):
+    elif package_key.lower().endswith((".json", ".json.j2")):
         mimetype = "application/json"
 
     else:
@@ -154,32 +256,56 @@ def __load_deployspec_file(task_payload: TaskPayload) -> dict[str, DeploySpec]:
     # if the process_func failes with an error, we should log it and return an empty specs dict
 
     name = os.path.basename(package_key)
-    if name in spec_mapping:
-        log.info("Loading spec name={}", name)
-        process_func, task = spec_mapping[name]
-        data = process_func(fileobj)
-        specs[task] = DeploySpec(actions=data)
-    else:
-        data = fileobj.read()
 
     # Upload the files to the artifacts store
 
     region = task_payload.actions.bucket_region
     bucket_name = task_payload.actions.bucket_name
 
-    # Get the storage location and download the single file
+    # Get the storage location and upload the actions to the artefacts store
     bucket = MagicS3Client.get_bucket(Region=region, BucketName=bucket_name)
 
-    key = task_payload.deployment_details.get_artefacts_key(name)
+    task, process_func = __get_preprocessor(name)
+    if task and process_func:
 
-    log.info("Uploading file: {})", key)
+        log.info("Loading spec file: {}", name)
 
-    if mimetype == "application/yaml":
-        data = util.to_yaml(data)
-    elif mimetype == "application/json":
-        data = util.to_json(data)
+        try:
+            # Run through preprocessor
+            data = process_func(fileobj, context)
 
-    bucket.put_object(Key=key, Body=data, ServerSideEncryption="AES256")
+            if util.is_yaml_mimetype(mimetype):
+                upload_data = util.to_yaml(data)
+            elif util.is_json_mimetype(mimetype):
+                upload_data = util.to_json(data)
+            else:
+                raise ValueError(f"Unsupported deployspec file type: {package_key}")
+
+        except Exception as e:
+            log.error("Malformed source file.  Fix it!  Did you forget to put quotes on a value? {}: {}", name, str(e))
+            raise e
+
+        key = task_payload.deployment_details.get_artefacts_key(name)
+
+        log.info("Uploading spec file: {}", key)
+
+        # s3 object mimetype is determined by the file extension
+        # we don't need to set it explicitly here.
+        bucket.put_object(Key=key, Body=upload_data, ServerSideEncryption="AES256")
+
+        # data get's mutated, don't know why...so don't use it after this.  Will fix later.
+        specs[task] = DeploySpec.model_validate({"actions": data})
+
+    else:
+        data = fileobj.read()  # btw, we can't use this io.BytesIO() stream for S3.  So, read the full data
+
+        key = task_payload.deployment_details.get_artefacts_key(name)
+
+        log.info("Uploading non-actions file: {})", key)
+
+        # s3 object mimetype is determined by the file extension
+        # we don't need to set it explicitly here.
+        bucket.put_object(Key=key, Body=data, ServerSideEncryption="AES256")
 
     # Process deployspec
     if not specs:
@@ -188,33 +314,32 @@ def __load_deployspec_file(task_payload: TaskPayload) -> dict[str, DeploySpec]:
     return specs
 
 
-def __load_deployspec_zip(task_payload: TaskPayload) -> dict[str, DeploySpec]:
+def __load_deployspec_zip(task_payload: TaskPayload, context: dict[str, Any]) -> dict[str, DeploySpec]:
     """
-    Process package for zip file.
+    Process a package for a zip file containing deployspecs and related files.
 
-    Package details will contain the location of the package.zip file.
-    This routine will extract the package.zip file and process the contents.
-    If it finds a deployspec.yaml file, it will process that.
+    Args:
+        task_payload: The task payload containing package and deployment details.
+        context: Dictionary for Jinja2 rendering.
 
-    It will return the actions generated as an index of tasks.
+    Returns:
+        Dictionary of deployment specifications keyed by task type.
 
-    :param task_payload: The task payload containing package and deployment details
-    :type task_payload: TaskPayload
-    :returns: Dictionary of deployment specifications keyed by task type
-    :rtype: dict[str, DeploySpec]
-    :raises ValueError: If package key is required but not provided
+    Raises:
+        ValueError: If the package key is missing or the zip is malformed.
 
-    Examples
-    --------
-    >>> task_payload = TaskPayload(
-    ...     package=PackageDetails(
-    ...         bucket_name="my-bucket",
-    ...         bucket_region="us-east-1",
-    ...         key="deployments/package.zip"
-    ...     )
-    ... )
-    >>> specs = load_deployspec(task_payload)
-    >>> # Returns: {"deploy": DeploySpec(...), "plan": DeploySpec(...)}
+    Examples:
+
+        >>> task_payload = TaskPayload(
+            package=PackageDetails(
+                bucket_name="my-bucket",
+                bucket_region="us-east-1",
+                key="deployments/package.zip"
+            )
+        )
+        specs = load_deployspec(task_payload, context)
+        # Returns: {"deploy": DeploySpec(...), "plan": DeploySpec(...)}
+
     """
     package_details = task_payload.package
 
@@ -238,7 +363,7 @@ def __load_deployspec_zip(task_payload: TaskPayload) -> dict[str, DeploySpec]:
 
             temp_file.seek(0)
 
-            spec = __process_package_zip(task_payload, temp_file)
+            spec = __process_package_zip(task_payload, temp_file, context)
 
         except Exception as e:
             log.error("Error processing package {}: {}", package_key, str(e))
@@ -247,25 +372,29 @@ def __load_deployspec_zip(task_payload: TaskPayload) -> dict[str, DeploySpec]:
     return spec
 
 
-def __process_package_zip(task_payload: TaskPayload, temp_file: tempfile.NamedTemporaryFile) -> dict[str, DeploySpec]:
+def __process_package_zip(task_payload: TaskPayload, temp_file, context: dict[str, Any]) -> dict[str, DeploySpec]:
     """
-    Process the zip package copying content to the artifacts store while extracting the actions
-    into a DeploySpec object. (plan, apply, deploy, or teardown)
+    Process a zip package, copying content to the artifacts store and extracting actions into DeploySpec objects.
 
-    :param task_payload: The task payload containing deployment details
-    :type task_payload: TaskPayload
-    :param temp_file: Temporary file containing the zip data (seekable file object)
-    :type temp_file: tempfile.NamedTemporaryFile
-    :returns: Dictionary of deployment specifications keyed by task type
-    :rtype: dict[str, DeploySpec]
-    :raises Exception: If the package does not contain a deployspec file or is malformed
+    Args:
+        task_payload: The task payload containing deployment details.
+        temp_file: Temporary file containing the zip data (seekable file object).
+        context: Dictionary for Jinja2 rendering.
 
-    Examples
-    --------
-    >>> with tempfile.NamedTemporaryFile() as temp_file:
-    ...     # temp_file contains zip data downloaded from S3
-    ...     specs = process_package_zip(task_payload, temp_file)
-    >>> # Returns: {"deploy": DeploySpec(...), "teardown": DeploySpec(...)}
+    Returns:
+        Dictionary of deployment specifications keyed by task type.
+
+    Raises:
+        Exception: If the package does not contain a deployspec file or is malformed.
+
+    Examples:
+
+        >>>
+        with tempfile.NamedTemporaryFile() as temp_file:
+            # temp_file contains zip data downloaded from S3
+            specs = process_package_zip(task_payload, temp_file, context)
+        # Returns: {"deploy": DeploySpec(...), "teardown": DeploySpec(...)}
+
     """
 
     dd = task_payload.deployment_details
@@ -292,32 +421,46 @@ def __process_package_zip(task_payload: TaskPayload, temp_file: tempfile.NamedTe
             # compiling.  This will be the deployspec, planspec, applyspec, or teardownspec
             # file.  We will also upload all files to the artifacts store for documentation purposes.
             # and return the spec for further processing.
-            if name in spec_mapping:
 
-                log.info("Loading spec name={}", name)
-                process_func, task = spec_mapping[name]
+            task, process_func = __get_preprocessor(name)
+            if task and process_func:
+
+                log.info("Loading spec name: {}", name)
 
                 with zipfile_obj.open(name) as file_in_zip:
                     # Read the file from the zip stream and convert it to a dictionary
                     # the procewss_func will be one of util.read_yaml or util.read_json
-                    data = process_func(file_in_zip)
-
-                # Group the actions by the "task" type (the task type is derrived from the file name)
-                specs[task] = DeploySpec(actions=data)
+                    data = process_func(file_in_zip, context)
 
                 # Upload the processed data
-                key = dd.get_artefacts_key(name)
-                log.info("Uploading processed file: {}", key)
 
-                # We reprocess the data dictionary into a string format for upload to the artefacts store
-                if name.endswith((".yaml", ".yml")):
-                    upload_data = util.to_yaml(data)
-                elif name.endswith(".json"):
-                    upload_data = util.to_json(data)
-                else:
-                    upload_data = util.to_yaml(data)  # Default to YAML (*.actions files)
+                try:
+                    # strip the j2 off the end of the name if it exists
+                    if name.endswith(".j2"):
+                        name = name[:-3]
 
-                bucket.put_object(Key=key, Body=upload_data, ServerSideEncryption="AES256")
+                    # We reprocess the data dictionary into a string format for upload to the artefacts store
+                    if name.endswith((".yaml", ".yml")):
+                        upload_data = util.to_yaml(data)  # This is 'round-trip' safe and will preserve comments
+                    elif name.endswith(".json"):
+                        upload_data = util.to_json(data)
+                    else:
+                        raise ValueError(f"Unsupported deployspec file type: {name}")
+
+                    key = dd.get_artefacts_key(name)
+                    log.info("Uploading spec file: {}", key)
+
+                    # s3 object mimetype is determined by the file extension
+                    # we don't need to set it explicitly here.
+                    bucket.put_object(Key=key, Body=upload_data, ServerSideEncryption="AES256")
+
+                except Exception as e:
+                    log.error("Malformed source file.  Fix it!  Did you forget to put quotes on a value? {}: {}", name, str(e))
+                    raise e
+
+                # Group the actions by the "task" type (the task type is derrived from the file name)
+                # For some reason 'data' is mutated.  Don't use it after this.  Will fix later.
+                specs[task] = DeploySpec.model_validate({"actions": data})
 
             else:
                 data = zipfile_obj.read(name)
@@ -326,8 +469,10 @@ def __process_package_zip(task_payload: TaskPayload, temp_file: tempfile.NamedTe
                 # and this includes the CloudFormation templates needed for the actions.
 
                 key = dd.get_artefacts_key(name)
-                log.info("Uploading file: {})", key)
+                log.info("Uploading non-spec file: {})", key)
 
+                # s3 object mimetype is determined by the file extension
+                # we don't need to set it explicitly here.
                 bucket.put_object(Key=key, Body=data, ServerSideEncryption="AES256")
 
     # Process deployspec
@@ -337,115 +482,113 @@ def __process_package_zip(task_payload: TaskPayload, temp_file: tempfile.NamedTe
     return specs
 
 
-def get_accounts_regions(
-    action_resource: ActionResource,
-) -> tuple[list[str], list[str]]:
+def get_accounts_regions(resource: ActionResource) -> tuple[list[str], list[str]]:
     """
-    Compile a list of accounts and regions for the action.
+    Compile a list of accounts and regions for the action resource.
 
-    We will combine the fields `account` and `accounts` into a single list.
-    We will combine the fields `region` and `regions` into a single list.
+    Combines the fields `account`/`accounts` and `region`/`regions` into unified lists.
+    If no region is specified, the default region is used.
 
-    If no region is specified, then the default region will be used.
+    Args:
+        resource: The action specification to extract accounts and regions from.
 
-    :param action_resource: The action specification to extract accounts and regions from
-    :type action_resource: ActionResource
-    :returns: Tuple containing lists of accounts and regions
-    :rtype: tuple[list[str], list[str]]
+    Returns:
+        Tuple containing lists of accounts and regions.
 
-    Examples
-    --------
-    >>> action_resource = ActionResource(
-    ...     spec={"account": "123456789012", "region": "us-east-1"}
-    ... )
-    >>> accounts, regions = get_accounts_regions(action_resource)
-    >>> # Returns: (["123456789012"], ["us-east-1"])
+    Examples:
+
+        >>> action_resource = ActionResource(
+            spec={"account": "123456789012", "region": "us-east-1"}
+        )
+        accounts, regions = get_accounts_regions(action_resource)
+        # Returns: (["123456789012"], ["us-east-1"])
+
     """
-    accounts = action_resource.spec.get("accounts") or action_resource.spec.get("Accounts") or []
-    account = action_resource.spec.get("account") or action_resource.spec.get("Account")
+    accounts = resource.spec.get("accounts") or resource.spec.get("Accounts") or []
+    account = resource.spec.get("account") or resource.spec.get("Account")
     if account and account not in accounts:
         accounts.append(account)
 
-    regions = action_resource.spec.get("regions") or action_resource.spec.get("Regions") or []
-    region = action_resource.spec.get("region") or action_resource.spec.get("Region") or util.get_region()
+    regions = resource.spec.get("regions") or resource.spec.get("Regions") or []
+    region = resource.spec.get("region") or resource.spec.get("Region") or util.get_region()
     if region and region not in regions:
         regions.append(region)
 
     return accounts, regions
 
 
-def get_region_account_labels(action_resource: ActionResource) -> list[str]:
+def get_region_account_labels(resource: ActionResource) -> list[str]:
     """
-    Generate a unique list of labels for the action specification
-    for each account/region permutation.
+    Generate a unique list of labels for the action specification for each account/region permutation.
 
-    :param action_resource: The action specification to generate labels for
-    :type action_resource: ActionResource
-    :returns: List of generated labels for account/region combinations
-    :rtype: list[str]
+    Args:
+        resource: The action specification to generate labels for.
 
-    Examples
-    --------
-    >>> action_resource = ActionResource(
-    ...     label="create-vpc",
-    ...     spec={"accounts": ["123", "456"], "regions": ["us-east-1", "us-west-2"]}
-    ... )
-    >>> labels = get_region_account_labels(action_resource)
-    >>> # Returns: ["create-vpc-123-us-east-1", "create-vpc-123-us-west-2",
-    >>> #           "create-vpc-456-us-east-1", "create-vpc-456-us-west-2"]
+    Returns:
+        List of generated labels for account/region combinations.
+
+    Examples:
+
+        >>>
+        action_resource = ActionResource(
+            label="create-vpc",
+            spec={"accounts": ["123", "456"], "regions": ["us-east-1", "us-west-2"]}
+        )
+        labels = get_region_account_labels(action_resource)
+        # Returns: ["create-vpc-123-us-east-1", "create-vpc-123-us-west-2",
+        #           "create-vpc-456-us-east-1", "create-vpc-456-us-west-2"]
+
     """
-    accounts, regions = get_accounts_regions(action_resource)
+    accounts, regions = get_accounts_regions(resource)
 
-    labels = [__get_action_name(action_resource, account, region) for account in accounts for region in regions]
+    labels = [__get_action_label(resource, account, region) for account in accounts for region in regions]
 
     return labels
 
 
-def __get_action_name(action_resource: ActionResource, account: str, region: str) -> str:
+def __get_action_label(action_resource: ActionResource, account: str, region: str) -> str:
     """
     Generate a unique action name based on the action specification, account, and region.
 
-    :param action_resource: The action specification to generate the name for
-    :type action_resource: ActionResource
-    :param account: The AWS account ID for this action
-    :type account: str
-    :param region: The AWS region for this action
-    :type region: str
-    :returns: The generated action name
-    :rtype: str
 
     Examples
     --------
-    >>> action_resource = ActionResource(label="create-vpc")
-    >>> name = __get_action_name(action_resource, "123456789012", "us-east-1")
-    >>> # Returns: "create-vpc-123456789012-us-east-1"
+    >>> # example
+    actioon_resource = ActionResource(label="create-vpc")
+    name = __get_action_name(action_resource, "123456789012", "us-east-1")
+    # Returns: "create-vpc-123456789012-us-east-1"
+
     """
     return f"{action_resource.label}-{account}-{region}"
 
 
 def compile_deployspec(task_payload: TaskPayload, deployspec: DeploySpec) -> list[ActionResource]:
     """
-    Convert deployspec into an actions list.
+    Convert a deployspec into a list of actions.
 
-    :param task_payload: The task payload containing deployment context
-    :type task_payload: TaskPayload
-    :param deployspec: The deployspec to compile into actions.  If None, it will use the deployspec from the task payload package.
-    :type deployspec: DeploySpec | None
-    :returns: List of compiled action specifications
-    :rtype: list[ActionResource]
-    :raises ValueError: If unknown action type is encountered
+    Args:
+        task_payload: The task payload containing deployment context.
+        deployspec: The deployspec to compile into actions.
 
-    Examples
-    --------
-    >>> deployspec = DeploySpec(actions=[
-    ...     ActionResource(type="create_stack", label="vpc", spec={...})
-    ... ])
-    >>> actions = compile_deployspec(task_payload, deployspec)
-    >>> # Returns: [ActionResource(...)]
+    Returns:
+        List of compiled action specifications.
 
-    >>> task_payload = TaskPayload(..., package=PackageDetails(..., deployspec=deployspec))
-    >>> actions = compile_deployspec(task_payload)
-    >>> # Returns: [ActionResource(...)]
+    Raises:
+        ValueError: If unknown action type is encountered.
+
+    Examples:
+
+        >>>
+        actions = [
+            {"type": "create_stack", "label": "vpc", "spec": {...}}
+        ]
+        actions = compile_raw_spec(task_payload, actions)
+        # Returns: [ActionResource(...)]
+        ...
+        task_payload = TaskPayload(..., package=PackageDetails(..., deployspec=deployspec))
+        actions = compile_deployspec(task_payload, deployspec)
+        # Returns: [ActionResource(...)]
+
     """
     if deployspec is None:
         raise ValueError("Deployspec is required to compile actions")
@@ -457,8 +600,6 @@ def compile_deployspec(task_payload: TaskPayload, deployspec: DeploySpec) -> lis
     # For the actions specified in the deployspec, compile them into a list of actions for the core_execute module
     compiled_actions: list[ActionResource] = []
     for action_resource in deployspec.actions:
-        if not ActionFactory.is_valid_action(action_resource.kind):
-            raise ValueError(f"Unknown action type {action_resource.kind}")
         compiled_actions.extend(compile_action(action_resource, task_payload, spec_label_map))
     return compiled_actions
 
@@ -479,22 +620,24 @@ def compile_action(
     """
     Compile a single action specification into executable actions.
 
-    :param action_resource: The action specification to compile
-    :type action_resource: ActionResource
-    :param task_payload: The task payload containing deployment context
-    :type task_payload: TaskPayload
-    :param spec_label_map: Mapping of spec labels to region/account combinations
-    :type spec_label_map: SpecLabelMapType
-    :returns: List of compiled action specifications
-    :rtype: list[ActionResource]
-    :raises ValueError: If required account/region information is missing or invalid
+    Args:
+        action_resource: The action specification to compile.
+        task_payload: The task payload containing deployment context.
+        spec_label_map: Mapping of spec labels to region/account combinations.
 
-    Examples
-    --------
-    >>> action_resource = ActionResource(type="create_stack", label="vpc", spec={...})
-    >>> actions = compile_action(action_resource, task_payload, spec_label_map,
-    ...                         allow_multiple_stacks=True, kind=CreateStackActionResource)
-    >>> # Returns: [ActionResource(...)]
+    Returns:
+        List of compiled action specifications.
+
+    Raises:
+        ValueError: If required account/region information is missing or invalid.
+
+    Examples:
+
+        >>>
+        action_resource = ActionResource(type="create_stack", label="vpc", spec={...})
+        actions = compile_action(action_resource, task_payload, spec_label_map)
+        # Returns: [ActionResource(...)]
+
     """
     accounts, regions = get_accounts_regions(action_resource)
 
@@ -516,26 +659,26 @@ def generate_action_command(
     """
     Generate an executable action command from an action specification.
 
-    :param task_payload: The task payload containing deployment context
-    :type task_payload: TaskPayload
-    :param action_resource: The action specification to generate command for
-    :type action_resource: ActionResource
-    :param spec_label_map: Mapping of spec labels to region/account combinations
-    :type spec_label_map: SpecLabelMapType
-    :param account: The AWS account ID for this action
-    :type account: str
-    :param region: The AWS region for this action
-    :type region: str
-    :returns: The generated action specification
-    :rtype: ActionResource
-    :raises ValueError: If action type is required but not provided
+    Args:
+        task_payload: The task payload containing deployment context.
+        action_resource: The action specification to generate command for.
+        spec_label_map: Mapping of spec labels to region/account combinations.
+        account: The AWS account ID for this action.
+        region: The AWS region for this action.
 
-    Examples
-    --------
-    >>> action_resource = ActionResource(action="AWS::CreateStack", label="vpc", spec={...})
-    >>> command = generate_action_command(task_payload, action_resource, spec_label_map,
-    ...                                  "123456789012", "us-east-1")
-    >>> # Returns: ActionResource with executable parameters
+    Returns:
+        The generated action specification.
+
+    Raises:
+        ValueError: If action type is required but not provided.
+
+    Examples:
+        >>>
+        action_resource = ActionResource(action="AWS::CreateStack", label="vpc", spec={...})
+        command = generate_action_command(task_payload, action_resource, spec_label_map,
+                                          "123456789012", "us-east-1")
+        # Returns: ActionResource with executable parameters
+
     """
 
     if action_resource.kind is None:
@@ -545,41 +688,43 @@ def generate_action_command(
     if klass is None:
         raise ValueError(f"Cannot find action class for {action_resource.kind}")
 
-    spec = deepcopy(action_resource.spec)
+    spec: dict = deepcopy(action_resource.spec)
 
-    __delkeys(["account", "region", "accounts", "regions", "Accounts", "Regions"], spec)
+    __delkeys(["account", "region", "accounts", "regions", "Account", "Region", "Accounts", "Regions"], spec)
 
-    spec["account"] = account
-    spec["region"] = region
+    spec["Account"] = account
+    spec["Region"] = region
 
     # Validate Parameters
-    spec = klass.generate_action_parameters(**spec)
+    action_spec: ActionSpec = klass.generate_action_parameters(**spec)
 
     # Check if the pydantic model has the "TemplateUrl" field, if it does
     # update the path to the bucket deployment details.
-    if hasattr(spec, "template_url"):
-        spec.template_url = __get_action_template_url(
+    if hasattr(action_spec, "template_url"):
+        action_spec.template_url = __get_action_template_url(  # type: ignore
             action_resource,
             task_payload.actions.bucket_name,
             task_payload.actions.bucket_region,
             task_payload.deployment_details,
         )
 
-    if hasattr(spec, "parameters"):
-        __apply_syntax_update(spec.parameters)
+    if hasattr(action_spec, "parameters"):
+        __apply_syntax_update(action_spec.parameters)  # type: ignore
 
-    if hasattr(spec, "tags"):
+    if hasattr(action_spec, "tags"):
         # Add default tags to all actions
-        spec.tags = __get_tags(action_resource.scope, task_payload.deployment_details, spec.tags)
+        action_spec.tags = __get_tags(action_resource.scope, task_payload.deployment_details, action_spec.tags)  # type: ignore
+
+    if action_resource.metadata is None:
+        action_resource.metadata = ActionMetadata()
 
     # Validate ActionResource.  Note, the "Kind" field is automatically updated in generate_action_resource
-    execute_action = klass.generate_action_resource(
-        **{
-            "Name": __get_action_name(action_resource, account, region),
-            "DependsOn": __get_depends_on(action_resource, spec_label_map),
-            "Spec": spec.model_dump(),
-        }
-    )
+    execution_data = action_resource.model_dump()
+    execution_data["Metadata"]["Name"] = f"{action_resource.metadata.name}-{account}-{region}"
+    execution_data["DependsOn"] = __get_depends_on(action_resource, spec_label_map)
+    execution_data["Spec"] = action_spec.model_dump()
+
+    execute_action = klass.generate_action_resource(**execution_data)
 
     return execute_action
 
@@ -593,22 +738,21 @@ def __get_action_template_url(
     """
     Get the template URL for a CloudFormation action.
 
-    :param action_resource: The action specification containing template parameters
-    :type action_resource: ActionResource
-    :param bucket_name: The S3 bucket name where templates are stored
-    :type bucket_name: str
-    :param bucket_region: The AWS region of the S3 bucket
-    :type bucket_region: str
-    :param deployment_details: The deployment details for path generation
-    :type deployment_details: DeploymentDetails
-    :returns: The template URL or None if no template specified
-    :rtype: str | None
+    Arg:
+        action_resource (ActionResource): The action specification containing template parameters
+        bucket_name (str): The S3 bucket name where templates are stored
+        bucket_region (str): The AWS region of the S3 bucket
+        deployment_details (DeploymentDetails): The deployment details for path generation
 
-    Examples
-    --------
-    >>> action_resource = ActionResource(spec={"template_url": "vpc.yaml"})
-    >>> url = __get_action_template_url(action_resource, "my-bucket", "us-east-1", deployment_details)
-    >>> # Returns: "s3://my-bucket/artifacts/portfolio/app/branch/build/vpc.yaml"
+    Returns:
+        (str | None): The template URL or None if no template specified
+
+    Examples:
+
+        >>> action_resource = ActionResource(spec={"template_url": "vpc.yaml"})
+        >>> url = __get_action_template_url(action_resource, "my-bucket", "us-east-1", deployment_details)
+        >>> # Returns: "s3://my-bucket/artifacts/portfolio/app/branch/build/vpc.yaml"
+
     """
 
     key = __getany(action_resource.spec, ["template_url", "TemplateUrl", "template", "Template"])
@@ -663,18 +807,23 @@ def __get_template_url(
 
 def get_context(task_payload: TaskPayload) -> dict:
     """
-    Get the context for the Jinja2 templating.
+    Get the context for Jinja2 templating.
 
-    :param task_payload: The task payload object containing deployment details
-    :type task_payload: TaskPayload
-    :returns: The context dictionary for Jinja2 templating
-    :rtype: dict
-    :raises Exception: If error occurs getting facts for deployment context
+    Args:
+        task_payload: The task payload object containing deployment details.
 
-    Examples
-    --------
-    >>> context = get_context(task_payload)
-    >>> # Returns: {"core": {"portfolio": {...}, "app": {...}, ...}}
+    Returns:
+        The context dictionary for Jinja2 templating.
+
+    Raises:
+        Exception: If error occurs getting facts for deployment context.
+
+    Examples:
+
+        >>>
+        context = get_context(task_payload)
+        # Returns: {"core": {"portfolio": {...}, "app": {...}, ...}}
+
     """
     deployment_details = task_payload.deployment_details
 
@@ -688,27 +837,42 @@ def get_context(task_payload: TaskPayload) -> dict:
     return {CONTEXT_ROOT: state}
 
 
-def apply_context(actions: list[ActionResource], context: dict) -> list[ActionResource]:
+def apply_context(actions: list[ActionResource] | list[dict[str, Any]], context: dict) -> list[ActionResource]:
     """
-    Apply state to the actions list. Uses Jinja Template to render the state.
+    Apply state to the actions list using Jinja2 template rendering.
 
-    :param actions: The list of action specifications to render
-    :type actions: list[ActionResource]
-    :param context: The context dictionary for template rendering
-    :type context: dict
-    :returns: The rendered actions list with context applied
-    :rtype: list[ActionResource]
-    :raises ValueError: If unknown action type is encountered in actions list
+    Args:
+        actions: The list of action specifications to render.
+        context: The context dictionary for template rendering.
 
-    Examples
-    --------
-    >>> actions = [ActionResource(spec={"StackName": "{{ core.portfolio }}-vpc"})]
-    >>> context = {"core": {"portfolio": "web-services"}}
-    >>> rendered = apply_context(actions, context)
-    >>> # Returns: [ActionResource(spec={"StackName": "web-services-vpc"})]
+    Returns:
+        The rendered actions list with context applied.
+
+    Raises:
+        ValueError: If unknown action type is encountered in actions list.
+
+    Examples:
+
+        >>>
+        actions = [ActionResource(spec={"StackName": "{{ core.portfolio }}-vpc"})]
+        context = {"core": {"portfolio": "web-services"}}
+        rendered = apply_context(actions, context)
+        # Returns: [ActionResource(spec={"StackName": "web-services-vpc"})]
+
     """
 
-    actions_list: list[dict[str, Any]] = [a.model_dump() for a in actions]
+    if not actions:
+        return []
+
+    if not context or CONTEXT_ROOT not in context:
+        log.warning("No context provided or context missing root key '{}', skipping rendering", CONTEXT_ROOT)
+        return []
+
+    actions_list: list[dict[str, Any]]
+    if isinstance(actions[0], ActionResource):
+        actions_list = [a.model_dump() for a in actions]  # type: ignore
+    else:
+        actions_list = actions  # type: ignore
 
     try:
         unrendered_contents = util.to_yaml(actions_list)
@@ -725,7 +889,7 @@ def apply_context(actions: list[ActionResource], context: dict) -> list[ActionRe
 
         # Convert the action list back to ActionResource objects
         # Please note that the value of action.kind and action.spec is NOT validated here.
-        actions: list[ActionResource] = []
+        actions = []
         for action in action_list:
             if isinstance(action, dict):
                 actions.append(ActionResource(**action))
@@ -743,9 +907,6 @@ def apply_context(actions: list[ActionResource], context: dict) -> list[ActionRe
             "error_message": str(e),
             "context_keys": list(context.keys()) if context else [],
         }
-
-        # Add Jinja2-specific error details
-        import jinja2
 
         if isinstance(e, jinja2.TemplateError):
             error_details.update(
@@ -787,7 +948,7 @@ def apply_context(actions: list[ActionResource], context: dict) -> list[ActionRe
                 log.error("Jinja2 Template Assertion Error: {}", str(e))
 
             # Log security errors
-            elif isinstance(e, jinja2.SecurityError):
+            elif isinstance(e, jinja2.exceptions.SecurityError):
                 error_details.update({"security_error": True})
                 log.error("Jinja2 Security Error: {}", str(e))
 
@@ -795,12 +956,9 @@ def apply_context(actions: list[ActionResource], context: dict) -> list[ActionRe
                 log.error("Jinja2 Template Error ({}): {}", type(e).__name__, str(e))
 
         # Log the template content for debugging (truncated if too long)
-        try:
-            template_preview = unrendered_contents[:500] + "..." if len(unrendered_contents) > 500 else unrendered_contents
-            error_details["template_preview"] = template_preview
-            log.debug("Template content preview: {}", template_preview)
-        except:
-            log.debug("Could not log template content preview")
+        template_preview = unrendered_contents[:500] + "..." if len(unrendered_contents) > 500 else unrendered_contents
+        error_details["template_preview"] = template_preview
+        log.debug("Template content preview: {}", template_preview)
 
         # Log available context for debugging
         if context and CONTEXT_ROOT in context:
@@ -828,19 +986,17 @@ def __get_tags(
     """
     Generate AWS tags based on deployment scope and details.
 
-    :param scope: The deployment scope (portfolio, app, branch, build)
-    :type scope: str | None
-    :param deployment_details: The deployment details containing tag information
-    :type deployment_details: DeploymentDetails
-    :param user_tags: User-provided tags that override deployment_details tags
-    :type user_tags: dict[str, str] | None
-    :returns: Dictionary of AWS tags or None if no tags
-    :rtype: dict | None
+    Args:
+        scope: The deployment scope (portfolio, app, branch, build).
+        deployment_details: The deployment details containing tag information.
+        user_tags: User-provided tags that override deployment_details tags.
 
-    Examples
-    --------
-    >>> tags = __get_tags("build", deployment_details, {"Environment": "prod"})
-    >>> # Returns: {"Portfolio": "core", "App": "api", "Branch": "master", "Build": "1234", "Environment": "prod"}
+    Returns:
+        Dictionary of AWS tags or None if no tags.
+
+    Examples:
+        tags = __get_tags("build", deployment_details, {"Environment": "prod"})
+        # Returns: {"Portfolio": "core", "App": "api", "Branch": "master", "Build": "1234", "Environment": "prod"}
     """
     tags: dict[str, str] = deployment_details.tags or {}
 
@@ -867,21 +1023,21 @@ def __get_tags(
 
 def __apply_syntax_update(parameters: dict | None) -> dict | None:
     """
-    Deal with runner syntax changes for backward compatibility.
+    Update stack parameters for backward compatibility with runner syntax changes.
 
-    Converts old syntax: ``S3ComplianceBucketName: "{{ foo.bar }}"``
-    To new syntax: ``S3ComplianceBucketName: "{{ 'foo/bar' | lookup }}"``
+    Converts old syntax: S3ComplianceBucketName: "{{ foo.bar }}"
+    To new syntax: S3ComplianceBucketName: "{{ 'foo/bar' | lookup }}"
 
-    :param parameters: The stack parameters dictionary to update
-    :type parameters: dict | None
-    :returns: The updated stack parameters with new syntax
-    :rtype: dict | None
+    Args:
+        parameters: The stack parameters dictionary to update.
 
-    Examples
-    --------
-    >>> spec = {"BucketName": "{{ portfolio.name }}"}
-    >>> updated = __apply_syntax_update(spec)
-    >>> # Returns: {"BucketName": "{{ 'portfolio/name' | lookup }}"}
+    Returns:
+        The updated stack parameters with new syntax.
+
+    Examples:
+        spec = {"BucketName": "{{ portfolio.name }}"}
+        updated = __apply_syntax_update(spec)
+        # Returns: {"BucketName": "{{ 'portfolio/name' | lookup }}"}
     """
     if not parameters:
         return None
@@ -901,24 +1057,26 @@ def __get_depends_on(action: ActionResource, spec_label_map: SpecLabelMapType) -
     """
     Get the dependency list for an action specification.
 
-    :param action: The action specification to get dependencies for
-    :type action: ActionResource
-    :param spec_label_map: Mapping of spec labels to region/account combinations
-    :type spec_label_map: SpecLabelMapType
-    :returns: List of action labels this action depends on
-    :rtype: list
+    Args:
+        action: The action specification to get dependencies for.
+        spec_label_map: Mapping of spec labels to region/account combinations.
 
-    Examples
-    --------
-    >>> action = ActionResource(depends_on=["vpc", "security"])
-    >>> deps = __get_depends_on(action, spec_label_map)
-    >>> # Returns: ["vpc-123-us-east-1", "security-123-us-east-1"]
+    Returns:
+        List of action labels this action depends on.
+
+    Examples:
+        action = ActionResource(depends_on=["vpc", "security"])
+        deps = __get_depends_on(action, spec_label_map)
+        # Returns: ["vpc-123-us-east-1", "security-123-us-east-1"]
     """
 
     if not action.depends_on:
         return []
 
-    depends_on: list = [item for sublist in map(lambda name: spec_label_map[name], action.depends_on) for item in sublist]
+    depends_on = []
+    for label in action.depends_on:
+        if label in spec_label_map:
+            depends_on.extend([item for item in spec_label_map[label]])
 
     return depends_on
 
@@ -930,21 +1088,17 @@ def __get_action_scope(action: ActionResource, deployment_details: DeploymentDet
     Relies on the deployspec to have templating to determine the scope or you can specify
     the scope in the action object.
 
-    Example stack_name: ``"{{ core.Project }}-{{ core.App }}-resources"``
-    The above will return the scope of SCOPE_APP ('app').
+    Args:
+        action: The action specification to determine scope for.
+        deployment_details: The deployment details containing scope information.
 
-    :param action: The action specification to determine scope for
-    :type action: ActionResource
-    :param deployment_details: The deployment details containing scope information
-    :type deployment_details: DeploymentDetails
-    :returns: The deployment scope (portfolio, app, branch, build)
-    :rtype: str
+    Returns:
+        The deployment scope (portfolio, app, branch, build).
 
-    Examples
-    --------
-    >>> action = ActionResource(spec={"stack_name": "{{ core.Portfolio }}-{{ core.App }}-vpc"})
-    >>> scope = __get_action_scope(action, deployment_details)
-    >>> # Returns: "app"
+    Examples:
+        action = ActionResource(spec={"stack_name": "{{ core.Portfolio }}-{{ core.App }}-vpc"})
+        scope = __get_action_scope(action, deployment_details)
+        # Returns: "app"
     """
 
     if action.scope:
@@ -962,20 +1116,18 @@ def __get_stack_scope(stack_name: str) -> str:
     """
     Return the scope based on stack name Jinja2 placeholder variables.
 
-    Example: ``stack_name = "{{ core.Project }}-{{ core.App }}-resources"``
+    Args:
+        stack_name: The Jinja2 stack name template to analyze.
 
-    :param stack_name: The Jinja2 stack name template to analyze
-    :type stack_name: str
-    :returns: The deployment scope (defaults to SCOPE_BUILD if not determinable)
-    :rtype: str
+    Returns:
+        The deployment scope (defaults to SCOPE_BUILD if not determinable).
 
-    Examples
-    --------
-    >>> scope = __get_stack_scope("{{ core.Portfolio }}-{{ core.App }}-vpc")
-    >>> # Returns: "app"
+    Examples:
+        scope = __get_stack_scope("{{ core.Portfolio }}-{{ core.App }}-vpc")
+        # Returns: "app"
 
-    >>> scope = __get_stack_scope("{{ core.Build }}-resources")
-    >>> # Returns: "build"
+        scope = __get_stack_scope("{{ core.Build }}-resources")
+        # Returns: "build"
     """
     # Determine stack scope for tagging
     if DD_BUILD in stack_name:
@@ -995,7 +1147,17 @@ def __get_stack_scope(stack_name: str) -> str:
 
 
 def __getany(data: dict, keys: list[str], default: Any = None) -> Any:
-    """Returns value for the first key it finds with a non-Empty value or the specified default"""
+    """
+    Return the value for the first key found with a non-empty value, or the specified default.
+
+    Args:
+        data: Dictionary to search.
+        keys: List of keys to check in order.
+        default: Value to return if no key is found.
+
+    Returns:
+        The value for the first matching key, or the default.
+    """
     for key in keys:
         value = data.get(key)
         if value:
@@ -1004,7 +1166,13 @@ def __getany(data: dict, keys: list[str], default: Any = None) -> Any:
 
 
 def __delkeys(keys: list, data: dict) -> None:
-    """Mutates data by deleting keys you specify"""
+    """
+    Mutate a dictionary by deleting the specified keys.
+
+    Args:
+        keys: List of keys to delete.
+        data: Dictionary to mutate.
+    """
     for key in keys:
         if key in data:
             del data[key]
