@@ -53,10 +53,10 @@ exclude = '''
 '''
 
 [tool.uv.sources]
+sck-core-runner = { path = "../sck-core-runner", editable = true }
 sck-core-framework = { path = "../sck-core-framework", editable = true }
 sck-core-db = { path = "../sck-core-db", editable = true }
 sck-core-execute = { path = "../sck-core-execute", editable = true }
-sck-core-runner = { path = "../sck-core-runner", editable = true }
 
 [build-system]
 requires = ["hatchling"]
