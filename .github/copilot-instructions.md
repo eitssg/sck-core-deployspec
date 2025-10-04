@@ -1,5 +1,8 @@
 # Copilot Instructions (Submodule: sck-core-deployspec)
 
+## Plan → Approval → Execute (Mandatory)
+Provide a plan (numbered actions) and await approval before performing non-trivial actions. Refer to root for details & exceptions.
+
 - Tech: Python package (deploy specs).
 - Precedence: Local first; fallback to root `../../.github/`.
 - Conventions: Align with `../sck-core-ui/docs/backend-code-style.md` when applicable.
