@@ -226,15 +226,7 @@ def __load_deployspec_file(task_payload: TaskPayload, context: dict[str, Any]) -
 
     """
     package_key = task_payload.package.key
-
-    if package_key.lower().endswith((".yaml", ".yml", ".yaml.j2", ".yml.j2")):
-        mimetype = "application/yaml"
-
-    elif package_key.lower().endswith((".json", ".json.j2")):
-        mimetype = "application/json"
-
-    else:
-        raise ValueError(f"Unsupported deployspec file type: {package_key}")
+    mimetype = task_payload.package.content_type
 
     # Download the artefactss from the Package store
 
@@ -242,11 +234,11 @@ def __load_deployspec_file(task_payload: TaskPayload, context: dict[str, Any]) -
     bucket_name = task_payload.package.bucket_name
 
     # Get the storage location and download the single file
-    bucket = MagicS3Client.get_bucket(Region=region, BucketName=bucket_name)
+    download_bucket = MagicS3Client.get_bucket(Region=region, BucketName=bucket_name)
 
     # If there is a package.zip file in this folder, we can process it.
     fileobj = io.BytesIO()
-    bucket.download_fileobj(Key=package_key, Fileobj=fileobj)
+    download_bucket.download_fileobj(Key=package_key, Fileobj=fileobj)
 
     # Reset Buffer Position
     fileobj.seek(0)  # Reset the pointer to the beginning so we can begin processing the zip
@@ -255,15 +247,12 @@ def __load_deployspec_file(task_payload: TaskPayload, context: dict[str, Any]) -
 
     # if the process_func failes with an error, we should log it and return an empty specs dict
 
-    name = os.path.basename(package_key)
+    name = task_payload.package.get_name()
 
     # Upload the files to the artifacts store
 
     region = task_payload.actions.bucket_region
     bucket_name = task_payload.actions.bucket_name
-
-    # Get the storage location and upload the actions to the artefacts store
-    bucket = MagicS3Client.get_bucket(Region=region, BucketName=bucket_name)
 
     task, process_func = __get_preprocessor(name)
     if task and process_func:
@@ -289,9 +278,12 @@ def __load_deployspec_file(task_payload: TaskPayload, context: dict[str, Any]) -
 
         log.info("Uploading spec file: {}", key)
 
+        # Get the storage location and upload the actions to the artefacts store
+        upload_bucket = MagicS3Client.get_bucket(Region=region, BucketName=bucket_name)
+
         # s3 object mimetype is determined by the file extension
         # we don't need to set it explicitly here.
-        bucket.put_object(Key=key, Body=upload_data, ServerSideEncryption="AES256")
+        upload_bucket.put_object(Key=key, Body=upload_data, ServerSideEncryption="AES256")
 
         # data get's mutated, don't know why...so don't use it after this.  Will fix later.
         specs[task] = DeploySpec.model_validate({"actions": data})
@@ -303,9 +295,12 @@ def __load_deployspec_file(task_payload: TaskPayload, context: dict[str, Any]) -
 
         log.info("Uploading non-actions file: {})", key)
 
+        # Get the storage location and upload the actions to the artefacts store
+        upload_bucket = MagicS3Client.get_bucket(Region=region, BucketName=bucket_name)
+
         # s3 object mimetype is determined by the file extension
         # we don't need to set it explicitly here.
-        bucket.put_object(Key=key, Body=data, ServerSideEncryption="AES256")
+        upload_bucket.put_object(Key=key, Body=data, ServerSideEncryption="AES256")
 
     # Process deployspec
     if not specs:

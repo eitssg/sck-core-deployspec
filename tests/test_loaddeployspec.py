@@ -1,9 +1,6 @@
 import os
 import pytest
-from unittest.mock import patch, Mock
-import tempfile
 
-import core_framework as util
 from core_framework.models import DeploySpec, ActionResource, TaskPayload
 from core_deployspec.compiler import load_deployspec
 
@@ -35,7 +32,7 @@ def test_load_deployspec_yaml_format(test_data_dir, task_payload: TaskPayload):
     """Test loading deployspec from YAML format."""
 
     file = os.path.join(test_data_dir, "deployspec.yaml")
-    task_payload.package.key = file
+    task_payload.set_package_key(file)
 
     deployspecs = load_deployspec(task_payload)
 
@@ -61,7 +58,7 @@ def test_load_deployspec_json_format(test_data_dir, task_payload: TaskPayload):
     """Test loading deployspec from JSON format."""
 
     file = os.path.join(test_data_dir, "deployspec.json")
-    task_payload.package.key = file
+    task_payload.set_package_key(file)
 
     deployspecs = load_deployspec(task_payload)
 
@@ -87,7 +84,7 @@ def test_load_deployspec_current_directory_no_file(test_data_dir, task_payload: 
     """Test loading from current directory when no deployspec exists."""
     # Use the deployspec_none directory that should not have deployspec files
     file = os.path.join(test_data_dir, "deployspec.none")
-    task_payload.package.key = file
+    task_payload.set_package_key(file)
 
     # Ensure the directory exists
     os.makedirs(file, exist_ok=True)
@@ -99,7 +96,7 @@ def test_load_deployspec_current_directory_no_file(test_data_dir, task_payload: 
 def test_load_deployspec_invalid_directory(task_payload: TaskPayload):
     """Test behavior with invalid directory path."""
     invalid_path = "/path/that/does/not/exist"
-    task_payload.package.key = invalid_path
+    task_payload.set_package_key(invalid_path)
 
     deployspec = load_deployspec(task_payload)
 
@@ -111,7 +108,7 @@ def test_load_deployspec_default_current_directory(test_data_dir, task_payload: 
 
     # Change to test directory that has deployspec
     yaml_folder = os.path.join(test_data_dir, "deployspec.yaml")
-    task_payload.package.key = yaml_folder
+    task_payload.set_package_key(yaml_folder)
 
     # Load without specifying path (should use current directory)
     deployspecs = load_deployspec(task_payload)

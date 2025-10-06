@@ -1,3 +1,4 @@
+from math import exp
 import pytest
 import os
 import core_framework as util
@@ -104,11 +105,16 @@ def test_generatge_create_stack(task_payload, deployspec: DeploySpec):
 
     spec = execute_action.spec
 
-    # make sure the path of our template was fixed
-    assert (
-        "test-client-automation-ap-southeast-1\\artefacts\\test_portfolio\\test_app\\test-branch\\test_build\\"
-        in spec["TemplateUrl"]
+    expected_value = os.path.join(
+        "test-client-automation-ap-southeast-1",
+        "artefacts",
+        "test_portfolio",
+        "test_app",
+        "test-branch",
+        "test_build",
     )
+    # make sure the path of our template was fixed
+    assert expected_value in spec["TemplateUrl"]
 
     # Did the translation work?
     assert spec["StackParameters"]["OtherParam"] == '{{ "context/Scope" | lookup }}'

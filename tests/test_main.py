@@ -100,12 +100,12 @@ def test_get_stack_scope_various_patterns(stack_name, expected_scope):
 def test_get_stack_scope_edge_cases():
     """Test __get_stack_scope with edge cases."""
     # Empty string
-    assert __get_stack_scope("") is 'build'  # default is build
+    assert __get_stack_scope("") == 'build'  # default is build
 
     # None input (if function handles it)
     try:
         result = __get_stack_scope("")
-        assert result is 'build'  # default is build
+        assert result == 'build'  # default is build
     except (TypeError, AttributeError):
         # Expected if function doesn't handle None
         pass
@@ -230,4 +230,4 @@ def test_actionresource_integration(sample_action_resource):
     # Test scope detection
     scope = __get_stack_scope(action_resource.spec.get("stack_name", ""))
     # This should return None since "test-stack" doesn't match any template pattern
-    assert scope is 'build'  # default is build
+    assert scope == 'build'  # default is build
