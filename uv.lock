@@ -902,6 +902,7 @@ name = "sck-core-db"
 version = "1.3.0"
 source = { editable = "../sck-core-db" }
 dependencies = [
+    { name = "black" },
     { name = "boto3" },
     { name = "botocore" },
     { name = "email-validator" },
@@ -912,6 +913,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "black", specifier = ">=25.9.0" },
     { name = "black", marker = "extra == 'dev'" },
     { name = "boto3", specifier = ">=1.39.7,<1.50.0" },
     { name = "boto3-stubs", marker = "extra == 'dev'", specifier = ">=1.39.7,<1.50.0" },
