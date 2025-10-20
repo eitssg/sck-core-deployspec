@@ -31,6 +31,7 @@ from core_deployspec.handler import handler as deployspec_compiler
 @pytest.fixture(scope="module")
 def command_line_arguments():
     """Fixture providing command line arguments simulation."""
+    client_id = util.get_client_id()  # Only from environment variable CLIENT_ID
     client = util.get_client()  # from the --client parameter
     task = "compile"  # from the "command" positional parameter
     portfolio = "my-portfolio"  # from the -p, --portfolio parameter

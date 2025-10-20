@@ -1,5 +1,7 @@
 from .handler import handler as compiler
 
-__version__ = "0.1.2-pre.6+5e44118"
+from importlib.metadata import version
+
+__version__ = version("sck-core-deployspec")
 
 __all__ = ["compiler"]
