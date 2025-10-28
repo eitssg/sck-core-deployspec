@@ -1,0 +1,42 @@
+# App fact data for testing
+Portfolio: "test-portfolio"
+App: "test-app"
+AppRegex: "^prn:test-portfolio:test-app.*:.*:.*$"
+Name: "Test Application"
+
+# Deployment configuration
+Environment: "test"
+Zone: "test-automation-service-zone"
+Region: "us-east-1"
+Repository: "https://github.com/test-org/test-app"
+EnforceValidation: "true"
+
+# Image aliases to reduce bake time
+ImageAliases:
+  "app:latest": "ami-testapp123456"
+  "app:stable": "ami-testapp654321"
+  "nginx:latest": "ami-testnginx789012"
+
+# Tags for AWS resources
+Tags:
+  Application: "TestApp"
+  Environment: "test"
+  Owner: "test-team"
+  CostCenter: "12345"
+  Backup: "daily"
+
+# Labels for organization
+Labels:
+  - "web-application"
+  - "microservice"
+  - "api"
+  - "testing"
+
+# Additional metadata
+Metadata:
+  DeploymentType: "rolling"
+  HealthCheck: "enabled"
+  AutoScaling: "enabled"
+  MinInstances: "2"
+  MaxInstances: "10"
+  TargetCPU: "70"

@@ -1,7 +1,5 @@
 import pytest
 
-import boto3
-
 from .conftest import *
 
 import core_framework as util
@@ -15,7 +13,6 @@ from core_db.registry.zone import ZoneFactsFactory
 from core_db.profile.model import ProfileModelFactory
 
 import core_logging as log
-
 
 client = "core"
 
@@ -34,6 +31,10 @@ def bootstrap_dynamo():
             ClientFactsFactory.delete_table(wait=True)
         ClientFactsFactory.create_table(wait=True)
 
+        if PortfolioFactsFactory.exists(client):
+            PortfolioFactsFactory.delete_table(client, wait=True)
+        PortfolioFactsFactory.create_table(client, wait=True)
+
         if ZoneFactsFactory.exists(client):
             ZoneFactsFactory.delete_table(client, wait=True)
         ZoneFactsFactory.create_table(client, wait=True)
@@ -42,13 +43,10 @@ def bootstrap_dynamo():
             AppFactsFactory.delete_table(client, wait=True)
         AppFactsFactory.create_table(client, wait=True)
 
+        # Items / portfolios / apps / branches / builds / components
         if PortfolioFactsFactory.exists(client):
             PortfolioFactsFactory.delete_table(client, wait=True)
         PortfolioFactsFactory.create_table(client, wait=True)
-
-        if PortfolioModelFactory.exists(client):
-            PortfolioModelFactory.delete_table(client, wait=True)
-        PortfolioModelFactory.create_table(client, wait=True)
 
         if EventModelFactory.exists(client):
             EventModelFactory.delete_table(client, wait=True)

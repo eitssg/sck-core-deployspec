@@ -1,0 +1,155 @@
+# Zone fact data for testing
+Zone: "test-automation-service-zone"
+
+# Account facts for the zone
+AccountFacts:
+  OrganizationalUnit: "TestUnit"
+  AwsAccountId: "345678901234"
+  AccountName: "test-automation-account"
+  Environment: "test"
+  
+  # KMS configuration
+  Kms:
+    AwsAccountId: "345678901234"
+    KmsKeyArn: "arn:aws:kms:us-east-1:345678901234:key/12345678-1234-1234-1234-123456789012"
+    KmsKey: "alias/test-automation-key"
+    DelegateAwsAccountIds: 
+      - "345678901234"
+      - "123456789012"
+    AllowSNS: true
+  
+  ResourceNamespace: "test-automation-service"
+  NetworkName: "test-network-infrastructure"
+  
+  # VPC aliases created by network pipelines
+  VpcAliases:
+    public:
+      Name: "test-network-public-vpc"
+      Description: "Public VPC for test workloads an alias 'public' is REQUIRED by core automation"
+      Cidr: ["10.100.0.0/16"]
+      VpcId: "vpc-0test1234abcd5678"
+    private:
+      Name: "test-network-private-vpc"
+      Description: "Private VPC for test workloads an alias 'private' is REQUIRED by core automation"
+      Cidr: ["10.101.0.0/16"]
+      VpcId: "vpc-1test1234abcd5678"
+  
+  # Subnet aliases created by network pipelines
+  SubnetAliases:
+    public: 
+        - Name: "test-network-public-subnet"
+          Description: "Public subnet for test workloads"
+          Cidr: "10.100.1.0/24"
+          AvailabilityZone: "ap-southeast-1a"
+          SubnetId: "subnet-0test1234abcd5678"
+        - Name: "test-network-public-subnet-2"
+          Description: "Public subnet for test workloads"
+          Cidr: "10.100.2.0/24"
+          AvailabilityZone: "ap-southeast-1b"
+          SubnetId: "subnet-0test1234abcd5678"
+        - Name: "test-network-public-subnet-3"
+          Description: "Public subnet for test workloads"
+          Cidr: "10.100.3.0/24"
+          AvailabilityZone: "ap-southeast-1c"
+          SubnetId: "subnet-0test1234abcd5678"
+    private: 
+        - Name: "test-network-private-subnet"
+          Description: "Private subnet for test workloads"
+          Cidr: "10.101.1.0/24"
+          AvailabilityZone: "ap-southeast-1a"
+          SubnetId: "subnet-1test1234abcd5678"
+        - Name: "test-network-private-subnet-2"
+          Description: "Private subnet for test workloads"
+          Cidr: "10.101.2.0/24"
+          AvailabilityZone: "ap-southeast-1b"
+          SubnetId: "subnet-1test1234abcd5678"
+        - Name: "test-network-private-subnet-3"
+          Description: "Private subnet for test workloads"
+          Cidr: "10.101.3.0/24"
+          AvailabilityZone: "ap-southeast-1c"
+          SubnetId: "subnet-1test1234abcd5678"
+    data: 
+        - Name: "test-network-data-subnet"
+          Description: "Data subnet for test workloads"
+          Cidr: "10.102.1.0/24"
+          AvailabilityZone: "ap-southeast-1a"
+          SubnetId: "subnet-2test1234abcd5678"
+        - Name: "test-network-data-subnet-2"
+          Description: "Data subnet for test workloads"
+          Cidr: "10.102.2.0/24"
+          AvailabilityZone: "ap-southeast-1b"
+          SubnetId: "subnet-2test1234abcd5678"
+        - Name: "test-network-data-subnet-3"
+          Description: "Data subnet for test workloads"
+          Cidr: "10.102.3.0/24"
+          AvailabilityZone: "ap-southeast-1c"
+          SubnetId: "subnet-2test1234abcd5678"
+
+  Tags:
+    Zone: "test-automation-service-zone"
+    Environment: "test"
+
+# Regional facts configuration
+RegionFacts:
+  "us-east-1":
+    AwsRegion: "us-east-1"
+    AzCount: 3
+    
+    # Image aliases for AMIs
+    ImageAliases:
+      "latest": "ami-test123456789"
+      "stable": "ami-test987654321"
+      "ubuntu:20.04": "ami-testubuntu2004"
+      
+    MinSuccessfulInstancesPercent: 80
+    
+    # Security aliases published by security team
+    SecurityAliases:
+      internet:
+        - Type: "cidr"
+          Value: "0.0.0.0/0" 
+          Description: "Internet CIDR"
+      intranet:
+        - Type: "cidr"
+          Value: "192.168.0.0/16"
+          Description: "Test Corporate CIDR 1"
+        - Type: "cidr"
+          Value: "10.0.0.0/8"
+          Description: "Test Corporate CIDR 2"
+      corporate:
+        - Type: "cidr"
+          Value: "172.16.0.0/12"
+          Description: "Test Corporate Network"
+          
+    # Security group aliases
+    SecurityGroupAliases:
+      web_sg: "sg-testweb123456"
+      app_sg: "sg-testapp123456" 
+      db_sg: "sg-testdb123456"
+      
+    # Proxy configuration
+    Proxy:
+      - Host: "testproxy.test.example.com"
+        Port: 8080
+        Url: "http://testproxy.test.example.com:8080"
+        NoProxy: "10.0.0.0/8,192.168.0.0/16,*.test.example.com"
+        
+    ProxyHost: "testproxy.test.example.com"
+    ProxyPort: 8080
+    ProxyUrl: "http://testproxy.test.example.com:8080"
+    NoProxy: "127.0.0.1,localhost,*.test.example.com"
+    
+    # DNS configuration
+    NameServers:
+      - "192.168.100.1"
+      - "192.168.100.2"
+      
+    Tags:
+      Region: "use1" 
+      Environment: "test"
+
+# Zone-level tags
+Tags:
+  Zone: "test-automation-service-zone"
+  ManagedBy: "automation"
+  Environment: "test"

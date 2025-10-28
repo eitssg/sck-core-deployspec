@@ -1,0 +1,146 @@
+# Portfolio fact data for testing
+Portfolio: "test-portfolio"
+Name: "Test Portfolio"
+
+# Contact information
+Contacts:
+  - Name: "John Doe"
+    Email: "john.doe@test.example.com"
+    Attributes:
+      Role: "Technical Contact"
+      Department: "Engineering"
+    Enabled: true
+  - Name: "Jane Smith"
+    Email: "jane.smith@test.example.com"
+    Attributes:
+      Role: "Business Contact"
+      Department: "Product"
+    Enabled: true
+
+# Approval workflow
+Approvers:
+  - Sequence: 1
+    Name: "Jane Doe"
+    Email: "jane.doe@test.example.com"
+    Roles: ["admin", "approver"]
+    Attributes:
+      Level: "Manager"
+      Department: "Engineering"
+    DependsOn: []
+    Enabled: true
+  - Sequence: 2
+    Name: "Bob Wilson"
+    Email: "bob.wilson@test.example.com"
+    Roles: ["senior-approver"]
+    Attributes:
+      Level: "Director"
+      Department: "Engineering"
+    DependsOn: [1]
+    Enabled: true
+
+# Project information
+Project:
+  Name: "Test Project"
+  Code: "TESTPRJ"
+  Repository: "https://github.com/test-org/test-project"
+  Description: "Test project for core automation"
+  Attributes:
+    Type: "Web Application"
+    Framework: "FastAPI"
+
+# Business application
+Bizapp:
+  Name: "Test Business App"
+  Code: "TESTBIZ"
+  Repository: "https://github.com/test-org/test-bizapp"
+  Description: "Test business application"
+  Attributes:
+    Category: "Internal Tool"
+    Priority: "Medium"
+
+# Ownership
+Owner:
+  Name: "John Doe"
+  Email: "john.doe@test.example.com"
+  Phone: "+1-555-0123"
+  Attributes:
+    Title: "Senior Engineer"
+    Team: "Platform Engineering"
+
+BusinessOwner:
+  Name: "Alice Johnson"
+  Email: "alice.johnson@test.example.com"
+  Phone: "+1-555-0456"
+  Attributes:
+    Title: "Product Manager"
+    Team: "Product Management"
+
+TechnicalOwner:
+  Name: "Charlie Brown"
+  Email: "charlie.brown@test.example.com"
+  Phone: "+1-555-0789"
+  Attributes:
+    Title: "Technical Lead"
+    Team: "Engineering"
+
+# Domain and metadata
+Domain: "test-app.test.example.com"
+IconUrl: "https://test.example.com/icons/portfolio.png"
+Category: "Internal"
+Labels: ["testing", "automation", "core"]
+PortfolioVersion: "1.0.0"
+LifecycleStatus: "active"
+
+# Tags and metadata
+Tags:
+  BizApp: "TestBizApp"
+  Manager: "John Doe"
+  Environment: "test"
+  CostCenter: "12345"
+
+Metadata:
+  CreatedDate: "2024-01-01T12:00:00Z"
+  LastReview: "2024-10-01T12:00:00Z"
+  NextReview: "2025-01-01T12:00:00Z"
+  Criticality: "medium"
+
+# Additional attributes
+Attributes:
+  Tier: "2"
+  SLA: "99.9%"
+  BackupRequired: "true"
+
+# Compliance information
+Compliance:
+  SOX: "false"
+  PCI: "false"
+  GDPR: "true"
+  SOC2: "true"
+
+# External identifiers
+Identifiers:
+  JIRA: "TESTPRJ"
+  ServiceNow: "SN12345"
+  Confluence: "TEST"
+
+# Links to external resources
+Links:
+  - Title: "Project Wiki"
+    Url: "https://wiki.test.example.com/test-project"
+    Kind: "documentation"
+    Attributes:
+      Internal: "true"
+  - Title: "Issue Tracker"
+    Url: "https://jira.test.example.com/projects/TESTPRJ"
+    Kind: "tracker"
+    Attributes:
+      Public: "false"
+
+# Dependencies
+Dependencies:
+  - "core-framework"
+  - "core-db"
+  - "shared-infrastructure"
+
+# App count (managed by system)
+AppCount: 3

@@ -31,13 +31,13 @@ from core_deployspec.handler import handler as deployspec_compiler
 @pytest.fixture(scope="module")
 def command_line_arguments():
     """Fixture providing command line arguments simulation."""
-    client_id = util.get_client_id()  # Only from environment variable CLIENT_ID
-    client = util.get_client()  # from the --client parameter
+    client_id = "client-id-12345" # Only from environment variable CLIENT_ID
+    client = "core"  # from the --client parameter
     task = "compile"  # from the "command" positional parameter
-    portfolio = "my-portfolio"  # from the -p, --portfolio parameter
-    app = "my-app"  # from the -a, --app parameter
-    branch = "my-branch"  # from the -b --branch parameter
-    build = "dp-build"  # from the -i, --build parameter
+    portfolio = "test-portfolio"  # from the -p, --portfolio parameter
+    app = "test-app"  # from the -a, --app parameter
+    branch = "main"  # from the -b --branch parameter
+    build = "latest"  # from the -i, --build parameter
     automation_type = "deployspec"  # from the --automation-type parameter
 
     # commandline example:
@@ -45,6 +45,7 @@ def command_line_arguments():
 
     return {
         "client": client,
+        "client_id": client_id,
         "task": task,
         "portfolio": portfolio,
         "app": app,
@@ -55,7 +56,7 @@ def command_line_arguments():
 
 
 @pytest.fixture(scope="module")
-def package_package():
+def package_package(bootstrap_dynamo):
     """Fixture creating a test package zip file."""
     # Typical lifecycle is: -> package -> upload -> compile -> deploy -> teardown
     # This is the "package" step. Create the zip file
@@ -132,9 +133,10 @@ def upload_package(task_payload: TaskPayload, package_package: str):
 
 
 @pytest.fixture(scope="module")
-def facts(task_payload: TaskPayload, command_line_arguments: dict, bootstrap_dynamo):
+def facts(task_payload: TaskPayload):
+    
     """Save to the dynamodb the seed data facts we need for testing."""
-    cf, zf, pf, af = initialize(command_line_arguments)
+    cf, zf, pf, af = initialize()
 
     deployment_details = task_payload.deployment_details
 
@@ -154,8 +156,8 @@ def facts(task_payload: TaskPayload, command_line_arguments: dict, bootstrap_dyn
 def test_deployspec_handler_compilation_and_execution(
     task_payload: TaskPayload,
     upload_package: PackageDetails,
-    facts: dict,
-    command_line_arguments: dict,
+    facts,
+    command_line_arguments,
 ):
     """Test the complete deployspec handler workflow."""
     # Typical lifecycle is: -> package -> upload -> compile -> deploy -> teardown

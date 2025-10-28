@@ -106,7 +106,7 @@ def test_generatge_create_stack(task_payload, deployspec: DeploySpec):
     spec = execute_action.spec
 
     expected_value = os.path.join(
-        "test-client-automation-ap-southeast-1",
+        "core-automation-ap-southeast-1",
         "artefacts",
         "test_portfolio",
         "test_app",

@@ -1,0 +1,61 @@
+# Client fact data for testing
+ClientId: "client-id-12345"
+Client: "core"
+ClientSecret: "core-secret-67890"
+ClientType: "organization"
+ClientStatus: "active"
+ClientDescription: "Core automation test client organization"
+ClientName: "Core Test Organization" 
+ClientScopes: 
+  - "read"
+  - "write" 
+  - "admin"
+ClientRedirectUrls:
+  - "https://localhost:8080/auth/callback"
+
+# AWS Organization configuration
+OrganizationId: "o-test123456"
+OrganizationName: "Test Organization"
+OrganizationAccount: "123456789012"
+OrganizationEmail: "admin@test.example.com"
+
+# Domain and networking
+Domain: "test.example.com"
+Homepage: "https://test.example.com"
+
+# AWS Account assignments for multi-account architecture
+AutomationAccount: "345678901234"
+IamAccount: "123456789012"
+AuditAccount: "234567890123" 
+SecurityAccount: "456789012345"
+NetworkAccount: "567890123456"
+
+# Regional configuration where the lambda functions are installed
+MasterRegion: "us-east-1"
+
+# Region for this client's org and sub-accounts app deployments
+ClientRegion: "us-east-1"
+
+# S3 bucket configuration
+BucketRegion: "ap-southeast-1"
+BucketName: "test-client-automation-ap-southeast-1"
+DocsBucketName: "test-client-docs-ap-southeast-1"
+ArtefactBucketName: "test-client-artefacts-ap-southeast-1"
+UiBucketName: "test-client-ui-ap-southeast-1"
+
+# Resource scoping
+Scope: ""
+
+# Tags and policies
+Tags:
+  Environment: "test"
+  Organization: "Core"
+  ManagedBy: "automation"
+  
+TagPolicy:
+  - Tags: "Environment"
+    Required: true
+    Description: "Environment classification for resources"
+  - Tags: "Organization" 
+    Required: true
+    Description: "Organization identifier for billing and governance"
